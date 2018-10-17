@@ -1,0 +1,5 @@
+if [[ $MACHINE_TYPE == "mac" ]]; then
+  open target/site/apidocs/index.html
+else
+  xdg-open target/site/apidocs/index.html
+fi
