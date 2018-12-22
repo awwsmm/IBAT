@@ -68,7 +68,7 @@ public final class PasswordUtils {
     * @param length length of the random {@code byte[]} to generate
     *
     * @return a "salt" {@code String} to use as the second argument to
-    * {@link encryptPassword(String, String)}, wrapped in an {@link Optional}
+    * {@link hashPassword(String, String)}, wrapped in an {@link Optional}
     *
     **/
   public static Optional<String> generateSalt (final int length) {
@@ -100,7 +100,7 @@ public final class PasswordUtils {
     * {@link Optional#empty()} if there was a problem
     *
     **/
-  public static Optional<String> encryptPassword (String password, String salt) {
+  public static Optional<String> hashPassword (String password, String salt) {
 
     // convert the password to a char array
     char[] chars = password.toCharArray();
@@ -137,7 +137,7 @@ public final class PasswordUtils {
 
     // if exception encountered, return empty Optional
     } catch (NoSuchAlgorithmException | InvalidKeySpecException ex) {
-      System.err.println("Exception encountered in encryptPassword()");
+      System.err.println("Exception encountered in hashPassword()");
       return Optional.empty();
 
     } finally {
@@ -155,7 +155,7 @@ public final class PasswordUtils {
     * {@code key}.
     *
     * <p>Returns {@code false} if the {@code password} and {@code salt} do not
-    * generate the {@code key}, or if {@link encryptPassword(String, String)}
+    * generate the {@code key}, or if {@link hashPassword(String, String)}
     * with {@code password} and {@code salt} as arguments returns
     * {@link Optional#empty()}.</p>
     *
@@ -169,7 +169,7 @@ public final class PasswordUtils {
     *
     **/
   public static boolean verifyPassword (String password, String key, String salt) {
-    Optional<String> optEncrypted = encryptPassword(password, salt);
+    Optional<String> optEncrypted = hashPassword(password, salt);
     if (!optEncrypted.isPresent()) return false;
     return optEncrypted.get().equals(key);
   }
