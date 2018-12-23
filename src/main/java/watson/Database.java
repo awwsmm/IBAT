@@ -9,12 +9,16 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import java.util.stream.Collectors;
+
 
 public final class Database {
 
@@ -99,25 +103,89 @@ public final class Database {
   // only returns non-null if everything succeeds
   // from then on, returns the same connection object
 
-  public static Database database = null;
+  private static Database database = null;
   private static boolean newDB = false;
   private static ResultSet resultSet = null;
   private static ResultSetMetaData rsmd = null;
 
-  // prepared statement (to use when changing password) prevents injection attacks
+  // prepared statements (ps_) prevent injection attacks
   //  see: https://docs.oracle.com/javase/9/docs/api/java/sql/PreparedStatement.html
   //  and: http://bobby-tables.com/java
 
-  private static PreparedStatement ps_chpwd;
-  private static PreparedStatement ps_adduser;
+  private static PreparedStatement ps_chpwd;   // for changing password
+  private static PreparedStatement ps_adduser; // for adding a new user
 
+  ///---------------------------------------------------------------------------
+  ///
+  ///  CONNECT TO / CREATE NEW DATABASE; RETURN Database OBJECT
+  ///
+  ///---------------------------------------------------------------------------
 
+  /**
+    * Constructs a properly-formatted {@code jdbc:derby} URL, given the database
+    * name and password and the user's username and password.
+    *
+    * <p>Returns an {@link Optional#empty empty Optional} if any of the arguments
+    * are {@code null}, but enforces no other restrictions on them.</p>
+    *
+    * @param dbName name of the database
+    * @param dbPwd boot password for the database
+    * @param userName name of the user creating / logging into the database
+    * @param userPwd password of the user creating / logging into the database
+    *
+    * @return a {@link StringBuilder} containing a formatted {@code jdbc:derby}
+    * URL, wrapped in an {@link Optional}.
+    *
+    **/
+  private static Optional<StringBuilder> constructURL (
+    String dbName, String dbPwd, String userName, String userPwd) {
 
+    // StringBuilder cannot append null Strings
+    if (dbName == null || dbPwd == null ||
+      userName == null || userPwd == null)
+      return Optional.empty();
+
+    // return standard format URL for Derby connection
+    StringBuilder sb = new StringBuilder();
+    sb.append("jdbc:derby:");    sb.append(dbName);
+    sb.append(";bootPassword="); sb.append(dbPwd);
+    sb.append(";user=");         sb.append(userName);
+    sb.append(";password=");     sb.append(userPwd);
+
+    return Optional.of(sb);
+  }
+
+  /**
+    * Initialises or creates the database specified by {@code databaseName} and
+    * returns a reference to that {@link Database}, wrapped in an {@link Optional}.
+    *
+    * <p>This class is a singleton class, and databases can only be loaded /
+    * created via this method. Once the database connection has been made, a new
+    * connection cannot be initialised unless the program is terminated. If a
+    * database has already been initialised, this method simply returns a
+    * reference to that database, wrapped in an {@link Optional}.</p>
+    *
+    * <p>If the attempt to connect to the database fails, or the default
+    * {@link Statement} and {@link PreparedStatement}s cannot be properly
+    * initialised, this method returns an {@link Optional#empty empty Optional}.
+    * Initialisation can then be re-attempted by the user by again calling
+    * this method.</p>
+    *
+    * @param databaseName name of the database to connect to / create
+    * @param bootPassword boot password for the database, required to connect to it
+    * @param userName name of the user connecting to / creating the database
+    * @param userPassword password for the user specified by {@code userName}
+    *
+    * @return the singleton {@link Database} object, wrapped in an
+    * {@link Optional}, or an {@link Optional#empty empty Optional} if there was
+    * a problem
+    *
+    **/
   public static Optional<Database> initialise (
     String databaseName, String bootPassword, String userName, String userPassword) {
 
     if (database != null) {
-      System.err.println("initialise() : database already initialised");
+      printWarning("initialise()", "database already initialised");
       return Optional.of(database);
     }
 
@@ -137,7 +205,7 @@ public final class Database {
     if (newDB) { try {
 
         // must be signed in as DBO to run SYSCS_SET_DATABASE_PROPERTY
-        //  -> set requireAuthentication to true
+        //  -> set requireAuthentication to true to enforce password authentication
         state.executeUpdate(
           "call SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY(" +
           "'derby.connection.requireAuthentication', 'true')");
@@ -148,11 +216,16 @@ public final class Database {
         //
         //  Only the DBO can create schemas (bit.ly/2Abear0) which are
         //  different than the current user name, and only already-existing
-        //  users can log in to the database. So only the DBO can create new
-        //  users. Users cannot create schemas different than their own
+        //  users can log in to the database. Therefore, only the DBO can create
+        //  new users. Users cannot create schemas different than their own
         //  usernames, and cannot create or delete tables outside their own
-        //  schemas; they can only delete their own accounts and create or
-        //  delete tables within their own schemas.
+        //  schemas. Theoretically, users could delete their own tables, but
+        //  this would leave their accounts in an unstable state. Users should
+        //  not be able to delete other users accounts, and they cannot delete
+        //  their own accounts while logged in.
+        //
+        //  The only logical setup, then, is that only the DBO can add and
+        //  delete user accounts, and that users cannot delete their own tables.
         //
         //----------------------------------------------------------------------
 
@@ -160,8 +233,30 @@ public final class Database {
         state.executeUpdate(
           "grant execute on procedure SYSCS_UTIL.SYSCS_RESET_PASSWORD to public");
 
+        // before we can add the DBO to the database, we need to create the schema
+        state.executeUpdate("create schema " + userName);
+
+        // don't use addUser() to add the DBO to the database, because it requires
+        // validation of the DBO's password from the SECURE table, which doesn't yet exist
+
+        state.execute("create table " + userName +
+          ".SECURE (salt varchar(1024) not null, hash varchar(1024) not null)");
+
+        // generate salt and hash password
+        Optional<String> optsalt = PasswordUtils.generateSalt(512);
+        if (!optsalt.isPresent()) return Optional.empty();
+        String salt = optsalt.get();
+
+        Optional<String> opthash = PasswordUtils.hashPassword(userPassword, salt);
+        if (!opthash.isPresent()) return Optional.empty();
+        String hash = opthash.get();
+
+        // add salt and hash to database
+        state.execute("insert into " + userName  +
+          ".SECURE (salt, hash) values ('" + salt + "', '" + hash + "')");
+
       } catch (SQLException ex) {
-        printSQLException(ex);
+        printSQLException("initialise()", ex);
         return Optional.empty();
     } }
 
@@ -172,36 +267,58 @@ public final class Database {
 
     if (newDB) {
 
-      if (!database.addUser(userName, userPassword)) {
-        System.err.println("initialise() : error adding database owner to database");
-        database = null; // reset mis-instantiated database
-        return Optional.empty();
-      }
+//      if (!database.addUser(userName, userPassword, userPassword)) {
+//        printError("initialise()", "error adding database owner to database");
+//        database = null; // reset mis-instantiated database
+//        return Optional.empty();
+//      }
 
-      try {
+      try { // add the DBO to the list of full read/write access users
+
+        ps_adduser.setString(1, userName);
+        ps_adduser.setString(2, userPassword);
+        ps_adduser.execute();
+
         state.executeUpdate(
           "call SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY(" +
           "'derby.database.fullAccessUsers', '" + userName + "')");
 
-
       } catch (SQLException ex) {
-        printSQLException(ex);
+        printError("initialise()", "error giving database owner full read/write access to database");
         database = null; // reset mis-instantiated database
         return Optional.empty();
     } }
 
     // if we've gotten this far, the connection is good; return the new db
-    System.out.println("initialise() : database successfully initialised");
-
+    printMessage("initialise()", "database successfully initialised");
     return Optional.of(database);
   }
 
-
-
-
-
-
-  // returns the connection, if successful, otherwise Optional.empty();
+  /**
+    * Attempts to acquire a connection to the database specified by
+    * {@code dbName} with the user account specified by {@code userName}.
+    *
+    * <p>If any arguments passed to this method are {@code null}, an
+    * {@link Optional#empty empty Optional} is returned. If the database
+    * specified by {@code dbName} already exists, it is loaded; otherwise, an
+    * attempt will be made to create a new database with the specified
+    * {@code dbName} and {@code dbPwd}.</p>
+    *
+    * <p>This method returns an {@link Optional#empty empty Optional} if the
+    * specified database already exists, but an invalid {@code userName} or
+    * {@code userPwd} was given, or if the database does not exist, but cannot
+    * be created.</p>
+    *
+    * @param dbName name of the database to connect to / create
+    * @param dbPwd boot password for the database, required to connect to it
+    * @param userName name of the user connecting to / creating the database
+    * @param userPwd password for the user specified by {@code userName}
+    *
+    * @return a {@link Connection} to the specified database, wrapped in an
+    * {@link Optional}, or an {@link Optional#empty empty Optional} if there
+    * was a problem
+    *
+    **/
   private static Optional<Connection> getConnection (
     String dbName, String dbPwd, String userName, String userPwd) {
 
@@ -210,21 +327,23 @@ public final class Database {
 
     // if any parameters were passed as null, constructURL returns empty
     if (!optSB.isPresent()) {
-      System.err.println("getConnection() : illegal argument(s) -- no parameter can be null");
+      printError("getConnection()", "illegal argument(s) -- no parameter can be null");
       return Optional.empty();
     } StringBuilder sb = optSB.get();
 
     try { // try to load database first, to avoid overwriting
       Optional<Connection> retval = Optional.of(DriverManager.getConnection(sb.toString()));
-
       return retval;
 
-    // if there's an exception, the database can't be found / loaded
+    // if there's an exception, the database can't be loaded
     } catch (SQLException ex) {
 
+      int    exi = ex.getErrorCode();
+      String exs = ex.getSQLState();
+
       // catch common cases
-      if (ex.getErrorCode() == 40000 && "08004".equals(ex.getSQLState())) {
-        System.err.println("getConnection() : invalid username or password.");
+      if (exi == 40000 && "08004".equals(exs)) {
+        printError("getConnection()", "invalid username or password");
         return Optional.empty();
       }
 
@@ -249,22 +368,28 @@ public final class Database {
       // if there's an exception, the database can't be created
       } catch (SQLException e2) {
 
-        // catch common cases
-
-        // <define common cases here>
-
         // unusual case? print error codes:
-        printSQLException(ex);
-        printSQLException(e2);
+        printSQLException("getConnection()", ex);
+        printSQLException("getConnection()", e2);
         return Optional.empty();
   } } }
 
-
-
-
-  // initialise the "statement" object, if it's not already initialised
-  // also initialise prepared statements here
-
+  /**
+    * Initialises all {@link Statement} and {@link PreparedStatement} objects
+    * to be used with the current database.
+    *
+    * <p>Returns an {@link Optional#empty empty Optional} if there was a
+    * problem, otherwise, returns the default {@link Statement} object for
+    * this database, wrapped in an {@link Optional}.</p>
+    *
+    * @param connection {@link Connection} used to create the default
+    * {@link Statement} and all {@link PreparedStatement}s
+    *
+    * @return the default {@link Statement} object for this database, wrapped in
+    * an {@link Optional}, or an {@link Optional#empty empty Optional} if there
+    * was a problem
+    *
+    **/
   private static Optional<Statement> getStatement (Connection connection) {
 
     if (connection == null) {
@@ -272,9 +397,7 @@ public final class Database {
       return Optional.empty();
     }
 
-    try {
-
-      //------------------------------------------------------------------------
+    try { //--------------------------------------------------------------------
       //  DEFINE PREPARED STATEMENTS
       //------------------------------------------------------------------------
 
@@ -290,160 +413,65 @@ public final class Database {
       return Optional.of(connection.createStatement());
 
     } catch (SQLException ex) {
-      printSQLException(ex);
+      printSQLException("getStatement()", ex);
       return Optional.empty();
   } }
 
-
-
-
-
-
-/// deleteAccount() // set password to null
-// have user enter password to confirm account deletion
-
-
-
-  // first, re-verify current password
-  // create another table called SECURE that stores the user's salt and hashed password
-  // when the user enters the password here, check it against that table
-
-  public boolean changePassword (String oldPassword, String newPassword) {
-
-    // if either argument is null or empty, throw an error
-    if (oldPassword == null || newPassword == null || "".equals(oldPassword) || "".equals(newPassword)) {
-      System.err.println("changePassword() : neither argument can be null or empty.");
-      return false;
-    }
-
-    // if new password has leading or trailing whitespace, throw error (bit.ly/2Sj7BtE)
-    if (!newPassword.trim().equals(newPassword)) {
-      System.err.println("changePassword() : password cannot have leading or trailing whitespace.");
-      return false;
-    }
-
-    try { // get the current user's username
-      String USER  =  user().orElseThrow(() -> new IllegalStateException(
-        "changePassword() : error getting current user"));
-
-      // get the salt and hash from this user's SECURE table
-      resultSet = this.statement.executeQuery("select * from SECURE");
-      resultSet.next();
-
-      String salt = resultSet.getString(1);
-      String hash = resultSet.getString(2);
-
-      // check if given password can be transformed to hash in database
-      boolean isValid = PasswordUtils.verifyPassword(oldPassword, hash, salt);
-
-      // if so, change current password to given password
-      if (isValid) {
-        ps_chpwd.setString(1, USER);
-        ps_chpwd.setString(2, newPassword);
-        ps_chpwd.execute();
-
-        // update salt and hash in 'SECURE' table
-        salt = PasswordUtils.generateSalt(512).get();
-        hash = PasswordUtils.hashPassword(newPassword, salt).get();
-
-        // update salt and hash in database
-        this.statement.execute("update " + USER + ".SECURE set hash = '" +
-          hash + "', salt = '" + salt + "'");
-
-        // inform the user that the password has been successfully changed
-        System.out.println("changePassword() : password successfully changed");
-        return true;
-
-      } else {
-        System.err.println("changePassword() : invalid password; password not changed");
-        return false;
-      }
-
-    } catch (SQLException ex) {
-
-      // catch common cases
-
-      // <define common cases here>
-
-      // unusual case? print error codes:
-      printSQLException(ex);
-      return false;
-  } }
-
-
-
-//all SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY('derby.user.<my user name>', '<your new password>')
-
-
-
-
-  // table can be table name only (in current schema)
-  // or table name and schema (as schema.table) when running as DBO
-
-  public void printTable (String table) {
-
-    // print error if `table` is null or empty
-    if (table == null || "".equals(table.trim())) {
-      System.err.println("printTable() : table name cannot be null or empty.");
-      return;
-    }
-
-    // get current user and database owner
-    String OWNER = owner().orElseThrow(() -> new IllegalStateException(
-      "printTable() : error getting database owner"));
-
-    String USER  =  user().orElseThrow(() -> new IllegalStateException(
-      "printTable() : error getting current user"));
-
-    // move table name to all-uppercase
-    String TABLE = table.toUpperCase();
-
-    // don't let any non-DBO user access "SECURE" tables
-//    if (!OWNER.equals(USER) && ("SECURE".equals(TABLE) ||
-//      String.format("%s.SECURE", USER).equals(TABLE))) {
-//      System.err.println("printTable() : non-database-owner user cannot access 'SECURE' tables.");
-//      return;
-//    }
-
-    // we can't use a prepared statement for table names, so instead, just
-    // check if the table is in the list of available tables, and if not,
-    // throw an error and return
-
-    if (!tables().contains(TABLE)) {
-      System.err.println("printTable() : table '" + table + "' does not exist.");
-      return;
-    }
-
-    try {
-      resultSet = this.statement.executeQuery("select * from " + TABLE);
-      rsmd = resultSet.getMetaData();
-      int numberOfColumns = rsmd.getColumnCount();
-
-      while(resultSet.next()) {
-        for (int ii = 1; ii <= numberOfColumns; ++ii) {
-          if (ii > 1) System.out.print(" | ");
-          System.out.print(resultSet.getString(ii));
-        } System.out.println();
-      }
-
-    } catch (SQLException ex) {
-
-      // catch common cases
-      if (ex.getErrorCode() == 30000 && "42502".equals(ex.getSQLState()))
-        System.err.println("printTable() : user does not have permission to view this table.");
-
-      // unusual case? print error codes:
-      printSQLException(ex);
-  } }
-
-
-
-
-
+  ///---------------------------------------------------------------------------
+  ///
+  ///  LIST, ADD, DELETE USERS; CHANGE, RESET USER PASSWORDS
+  ///
+  ///---------------------------------------------------------------------------
 
   /**
-    * Attempts to add the given user to the database, along with a "contacts"
-    * table and a "groups" table for that user.
+    * Returns an {@link Optional Optional&lt;List&lt;String&gt;&gt;} containing
+    * the names of all users in the database.
+    *
+    * <p>Can only be executed by the database {@link owner}. If run by any other
+    * user, an {@link Optional#empty empty Optional} will be returned, and a
+    * warning will be printed to the console. All usernames are returned in
+    * all-uppercase letters.</p>
+    *
+    * <p>Returns an empty {@link List} wrapped in an {@link Optional} and prints
+    * an {@link SQLException} to the console if there was a problem accessing
+    * the {@code database}.</p>
+    *
+    * @return an {@link Optional Optional&lt;List&lt;String&gt;&gt;} containing
+    * the names of all users in the database
+    *
+    **/
+  public Optional<List<String>> users() {
+
+    // if current user is not DBO, they can't use this method
+    if(!userIsDBO()) {
+      printError("users()", "only database owner can view list of users");
+      return Optional.empty();
+    }
+
+    // list of users to return
+    List<String> USERS = new ArrayList<>();
+
+    try {
+      resultSet = this.statement.executeQuery("select username from sys.sysusers");
+      while (resultSet.next()) USERS.add(resultSet.getString(1).toUpperCase());
+
+    // catch SQL errors -- return empty list if there was a problem
+    } catch (SQLException ex) {
+      printSQLException("users()", ex);
+      USERS.clear(); // clear half-filled list
+    }
+
+    // return user names
+    return Optional.of(USERS);
+  }
+
+  /**
+    * Attempts to add a new user to the database with the given {@code username}
+    * and {@code password}.
+    *
+    * <p>This method can only be run by the database owner (DBO), and, as an
+    * added measure of security, it requires the DBO to re-enter their password
+    * ({@code dboPassword}).</p>
     *
     * <p>Returns {@code true} if the user was successfully added to the
     * database. If either the {@code username} or {@code password} provided
@@ -452,27 +480,29 @@ public final class Database {
     * <p>Returns {@code false} and prints an {@link SQLException} to the console
     * if there was a problem accessing the {@code database}.</p>
     *
-    * @param username username of the new user
-    * @param password password of the new user
+    * @param username new user's username
+    * @param password new user's password
+    * @param dboPassword password of the database owner
     *
     * @return {@code true} if the new user was successfully added to the
     * database, false otherwise
     *
     **/
-  public boolean addUser (String username, String password) {
+  public boolean addUser (String username, String password, String dboPassword) {
 
     //--------------------------------------------------------------------------
     //  validate username and password
     //--------------------------------------------------------------------------
 
-    if (username == null || password == null || "".equals(username) || "".equals(password)) {
-      System.err.println("addUser() : neither username nor password can be null or empty");
+    if (username == null || password == null ||
+          "".equals(username.trim()) || "".equals(password.trim())) {
+      printError("addUser()", "neither username nor password can be null, empty, or all whitespace");
       return false;
     }
 
     // if password has leading or trailing whitespace, throw error (bit.ly/2Sj7BtE)
     if (!password.trim().equals(password)) {
-      System.err.println("addUser() : password cannot have leading or trailing whitespace.");
+      printError("addUser()", "password cannot have leading or trailing whitespace");
       return false;
     }
 
@@ -487,25 +517,55 @@ public final class Database {
       return false;
     }
 
+/// add restrictions on usernames and passwords (> 8 chars, etc?)
+
+    //--------------------------------------------------------------------------
+    //  get all prerequisite information; if there are any problems, fail fast
+    //--------------------------------------------------------------------------
+
+    Optional<String> OPTOWNER = owner();
+    if (!OPTOWNER.isPresent()) return false;
+    String OWNER = OPTOWNER.get();
+
+    Optional<List<String>> OPTUSERS = users();
+    if (!OPTUSERS.isPresent()) return false;
+    List<String> USERS = OPTUSERS.get();
+
+    // tables() returns an empty list if there are no tables
+    List<String> TABLES = tables();
+
     //--------------------------------------------------------------------------
     //  only DBO can add users
     //--------------------------------------------------------------------------
 
-    String OWNER = owner().orElseThrow(() -> new IllegalStateException(
-      "addUser() : error getting database owner"));
-
-    String USER  =  user().orElseThrow(() -> new IllegalStateException(
-      "addUser() : error getting current user"));
-
     // if current user is not DBO, they can't use this method
-    if(!OWNER.equals(USER)) {
+    if(!userIsDBO()) {
       System.err.println("addUser() : only database owner can add new users.");
       return false;
     }
 
-    // only DBO can view list of users
-    List<String> users = users().orElseThrow(() -> new IllegalStateException(
-      "addUser() : error getting list of users"));
+    try { // verify the DBO's password
+      // get the salt and hash from the DBO's SECURE table
+      resultSet = this.statement.executeQuery("select * from " + OWNER + ".SECURE");
+      resultSet.next();
+
+      String salt = resultSet.getString(1);
+      String hash = resultSet.getString(2);
+
+      // check if given password can be transformed to hash in database
+      boolean isValid = PasswordUtils.verifyPassword(dboPassword, hash, salt);
+
+      // if valid, continue, otherwise return false
+      if (!isValid) {
+        printError("addUser()", "could not verify database owner's password");
+        return false;
+      }
+
+    // catch SQL exceptions
+    } catch (SQLException ex) {
+      printSQLException("addUser()", ex);
+      return false;
+    }
 
     //--------------------------------------------------------------------------
     //  try to create a new user, if that user doesn't already exist
@@ -515,7 +575,7 @@ public final class Database {
       String USERNAME = username.toUpperCase();
 
       // passwords can contain symbols, etc., so we need a prepared statement
-      if (!users.contains(USERNAME)) {
+      if (!USERS.contains(USERNAME)) {
         ps_adduser.setString(1, USERNAME);
         ps_adduser.setString(2, password);
         ps_adduser.execute();
@@ -535,8 +595,6 @@ public final class Database {
       String cTable = USERNAME + ".CONTACTS"; // user's contacts list
       String gTable = USERNAME + ".GROUPS";   // user's contacts groups
       String sTable = USERNAME + ".SECURE";   // user's hashed password and salt
-
-      List<String> TABLES = tables();
 
       // create 'CONTACTS' table
       if (!OWNER.equals(USERNAME) && !TABLES.contains(cTable)) {
@@ -568,8 +626,13 @@ public final class Database {
           "(salt varchar(1024) not null, hash varchar(1024) not null)");
 
         // generate salt and hash password
-        String salt = PasswordUtils.generateSalt(512).get();
-        String hash = PasswordUtils.hashPassword(password, salt).get();
+        Optional<String> optsalt = PasswordUtils.generateSalt(512);
+        if (!optsalt.isPresent()) return false;
+        String salt = optsalt.get();
+
+        Optional<String> opthash = PasswordUtils.hashPassword(password, salt);
+        if (!opthash.isPresent()) return false;
+        String hash = opthash.get();
 
         // add salt and hash to database
         this.statement.execute("insert into " + sTable  +
@@ -583,6 +646,7 @@ public final class Database {
       // if we've made it here and no errors have been thrown...
       // ...we've successfully added a new user to the database!
 
+      printMessage("addUser()", "user '" + username + "' successfully added");
       return true;
 
     // catch SQL errors
@@ -593,154 +657,294 @@ public final class Database {
 
       // catch common cases
       if        (exi == 30000 && "42X01".equals(exs)) {
-        System.err.println("addUser() : username cannot be a reserved SQL word (see: bit.ly/2Abbzxc).");
+        printError("addUser()", "username cannot be a reserved SQL word (see: bit.ly/2Abbzxc)");
 
       } else if (exi == 30000 && "28502".equals(exs)) {
-        System.err.printf("addUser() : invalid username \"%s\"%n", username);
+        printError("addUser()", "invalid username \"" + username + "\"");
 
       // unusual case? print error codes:
-      } else printSQLException(ex);
+      } else printSQLException("addUser()", ex);
       return false;
-
-    // print message we defined above
-    } catch (IllegalStateException ex) {
-      System.err.println(ex.getMessage());
-      return false;
-    }
-  }
-
-  /**
-    * Returns the username of the database owner (DBO), wrapped in an
-    * {@link Optional}.
-    *
-    * <p>Returns an empty {@link Optional} and prints an {@link SQLException} to
-    * the console if there was a problem accessing the {@code database}.</p>
-    *
-    * @return the username of the database owner (DBO), wrapped in an
-    * {@link Optional}.
-    *
-    **/
-  public Optional<String> owner() {
-
-    try { // DBO cannot be changed; creator of system tables is therefore DBO
-      resultSet = this.statement.executeQuery(
-        "select authorizationid from sys.sysschemas where schemaname='SYS'");
-
-      resultSet.next();
-      return Optional.of(resultSet.getString(1).toUpperCase());
-
-    // catch SQL errors
-    } catch (SQLException ex) {
-      printSQLException(ex);
-      return Optional.empty();
-    }
-  }
-
-  /**
-    * Returns the name of the current user, wrapped in an {@link Optional}.
-    *
-    * <p>Returns an empty {@link Optional} and prints an {@link SQLException} to
-    * the console if there was a problem accessing the {@code database}.</p>
-    *
-    * @return the name of the current user, wrapped in an {@link Optional}.
-    *
-    **/
-  public Optional<String> user() {
-    try {
-      resultSet = statement.executeQuery("values current_user");
-      resultSet.next();
-      return Optional.of(resultSet.getString(1).toUpperCase());
-
-    // catch SQL errors
-    } catch (SQLException ex) {
-      printSQLException(ex);
-      return Optional.empty();
   } }
 
   /**
-    * Constructs a properly-formatted {@code jdbc:derby} URL, given the database
-    * name and password and the user's username and password.
+    * Attempts to delete the user with the given {@code username} from the
+    * database, along with all of their data.
     *
-    * <p>Returns an empty {@link Optional} if any of the arguments are
-    * {@code null}, but enforces no other restrictions on them.</p>
+    * <p>This method can only be run by the database owner (DBO), and, as an
+    * added measure of security, it requires the DBO to re-enter their password
+    * ({@code dboPassword}).</p>
     *
-    * @param dbName name of the database
-    * @param dbPwd boot password for the database
-    * @param userName name of the user creating / logging into the database
-    * @param userPwd password of the user creating / logging into the database
+    * <p>Returns {@code true} if the user was successfully removed from the
+    * database. Returns {@code false} if the user doesn't exist, if there was
+    * some problem accessing the database, or if the database owner's password
+    * ({@code dboPassword}) is incorrect.</p>
     *
-    * @return a {@link StringBuilder} containing a formatted {@code jdbc:derby}
-    * URL, wrapped in an {@link Optional}.
+    * @param username username of the user to delete
+    * @param dboPassword password of the database owner
+    *
+    * @return {@code true} if the user was successfully removed from the
+    * database, false otherwise
     *
     **/
-  protected static Optional<StringBuilder> constructURL (
-    String dbName, String dbPwd, String userName, String userPwd) {
+  public boolean deleteUser (String username, String dboPassword) {
 
-    // StringBuilder cannot append null Strings
-    if (dbName == null || dbPwd == null ||
-      userName == null || userPwd == null)
-      return Optional.empty();
+    //--------------------------------------------------------------------------
+    //  verify that `username` is in the list of users
+    //--------------------------------------------------------------------------
 
-    // return standard format URL for Derby connection
-    StringBuilder sb = new StringBuilder();
-    sb.append("jdbc:derby:");    sb.append(dbName);
-    sb.append(";bootPassword="); sb.append(dbPwd);
-    sb.append(";user=");         sb.append(userName);
-    sb.append(";password=");     sb.append(userPwd);
+    Optional<List<String>> OPTUSERS = users();
+    if (!OPTUSERS.isPresent()) return false;
+    List<String> USERS = OPTUSERS.get();
 
-    return Optional.of(sb);
+    // capitalise username
+    String USERNAME = username.toUpperCase();
+
+    if (!USERS.contains(USERNAME)) {
+      printError("deleteUser()", "user '" + username + "' doesn't exist");
+      return false;
+    }
+
+    //--------------------------------------------------------------------------
+    //  verify DBO password
+    //--------------------------------------------------------------------------
+
+    // if current user is not DBO, they can't use this method
+    if(!userIsDBO()) {
+      printError("deleteUser()", "only database owner can add new users");
+      return false;
+    }
+
+    Optional<String> OPTOWNER = user();
+    if (!OPTOWNER.isPresent()) return false;
+    String OWNER = OPTOWNER.get();
+
+    try { // verify the DBO's password
+      // get the salt and hash from the DBO's SECURE table
+      resultSet = this.statement.executeQuery("select * from " + OWNER + ".SECURE");
+      resultSet.next();
+
+      String salt = resultSet.getString(1);
+      String hash = resultSet.getString(2);
+
+      // check if given password can be transformed to hash in database
+      boolean isValid = PasswordUtils.verifyPassword(dboPassword, hash, salt);
+
+      // if valid, continue, otherwise return false
+      if (!isValid) {
+        printError("deleteUser()", "could not verify database owner's password");
+        return false;
+      }
+
+      //------------------------------------------------------------------------
+      //  drop user's tables and schema
+      //------------------------------------------------------------------------
+
+      this.statement.execute("drop table "  + USERNAME + ".GROUPS");
+      this.statement.execute("drop table "  + USERNAME + ".CONTACTS");
+      this.statement.execute("drop table "  + USERNAME + ".SECURE");
+      this.statement.execute("drop schema " + USERNAME + " restrict");
+
+      this.statement.executeUpdate( // delete user
+        "call SYSCS_UTIL.SYSCS_DROP_USER('" + USERNAME + "')");
+
+      // if we've made it this far without throwing an error, success!
+      printMessage("deleteUser()", "user '" + username + "' successfully deleted");
+      return true;
+
+    // catch SQL exceptions
+    } catch (SQLException ex) {
+      printSQLException("deleteUser()", ex);
+      return false;
+    }
   }
 
   /**
-    * Returns an {@link Optional Optional&lt;List&lt;String&gt;&gt;} containing
-    * the names of all users in the database.
+    * Changes the current user's password.
     *
-    * <p>Can only be executed by the database {@link owner}. If run by any other
-    * user, an {@link Optional#empty empty Optional} will be returned, and a
-    * warning will be printed to the console. All usernames are returned in
-    * all-uppercase letters.</p>
+    * <p>If the user enters a {@code null}, empty, or all-whitespace password,
+    * this method prints an error and returns {@code false}. Also, if
+    * {@code newPassword} has any leading or trailing whitespace, an error is
+    * printed and {@code false} is returned.</p>
     *
-    * <p>Returns an empty {@link List} wrapped in an {@link Optional} and prints
-    * an {@link SQLException} to the console if there was a problem accessing
-    * the {@code database}.</p>
+    * <p>If the user enters an incorrect {@code oldPassword}, the password is
+    * not changed and {@code false} is returned.</p>
     *
-    * @return an {@link Optional Optional&lt;List&lt;String&gt;&gt;} containing
-    * the names of all users in the database
+    * @param oldPassword this user's current password
+    * @param newPassword new password for this user
+    *
+    * @return true if this user's password was successfully changed to the
+    * {@code newPassword}
     *
     **/
-  public Optional<List<String>> users() {
+  public boolean changePassword (String oldPassword, String newPassword) {
 
-    String OWNER = owner().orElseThrow(() -> new IllegalStateException(
-      "users() : error getting database owner"));
-
-    String USER  =  user().orElseThrow(() -> new IllegalStateException(
-      "users() : error getting current user"));
-
-    // if current user is not DBO, they can't use this method
-    if(!OWNER.equals(USER)) {
-      System.err.println("users() : only database owner can view list of users.");
-      return Optional.empty();
+    // if either argument is null or empty, throw an error
+    if (oldPassword == null || newPassword == null ||
+          "".equals(oldPassword.trim()) || "".equals(newPassword.trim())) {
+      printError("changePassword()", "neither argument can be null, empty, or all whitespace");
+      return false;
     }
 
-    List<String> USERS = new ArrayList<>();
+    // if new password has leading or trailing whitespace, throw error (bit.ly/2Sj7BtE)
+    if (!newPassword.trim().equals(newPassword)) {
+      printError("changePassword()", "password cannot have leading or trailing whitespace");
+      return false;
+    }
+
+    // if there's a problem getting the current user, fail fast
+    Optional<String> OPTUSER = user();
+    if (!OPTUSER.isPresent()) return false;
+    String USER = OPTUSER.get();
 
     try {
-      resultSet = this.statement.executeQuery("select username from sys.sysusers");
-      while (resultSet.next()) USERS.add(resultSet.getString(1).toUpperCase());
+      // get the salt and hash from this user's SECURE table
+      resultSet = this.statement.executeQuery("select * from SECURE");
+      resultSet.next();
+
+      String salt = resultSet.getString(1);
+      String hash = resultSet.getString(2);
+
+      // check if given password can be transformed to hash in database
+      boolean isValid = PasswordUtils.verifyPassword(oldPassword, hash, salt);
+
+      // if so, change current password to given password
+      if (isValid) {
+        ps_chpwd.setString(1, USER);
+        ps_chpwd.setString(2, newPassword);
+
+        // generate salt and hash password
+        Optional<String> optsalt = PasswordUtils.generateSalt(512);
+        if (!optsalt.isPresent()) return false;
+        salt = optsalt.get();
+
+        Optional<String> opthash = PasswordUtils.hashPassword(newPassword, salt);
+        if (!opthash.isPresent()) return false;
+        hash = opthash.get();
+
+        // update salt and hash in database
+        this.statement.execute("update " + USER + ".SECURE set hash = '" +
+          hash + "', salt = '" + salt + "'");
+
+        // don't update password until hash and salt are updated
+        ps_chpwd.execute();
+
+        // inform the user that the password has been successfully changed
+        printMessage("changePassword()", "password successfully changed");
+        return true;
+
+      } else {
+        printMessage("changePassword()", "invalid password; password not changed");
+        return false;
+      }
 
     // catch SQL errors
     } catch (SQLException ex) {
-      printSQLException(ex);
-      USERS.clear(); // clear half-filled list
+      printSQLException("changePassword()", ex);
+      return false;
+  } }
 
-    // print message we defined above
-    } catch (IllegalStateException ex) {
-      System.err.println(ex.getMessage());
+/// DBO-only method to reset user password
+
+  public boolean resetPassword (String username, String newPassword, String dboPassword) {
+
+    // if any argument is null or empty, throw an error
+    if (username == null || newPassword == null || dboPassword == null ||
+          "".equals(username.trim()) || "".equals(newPassword.trim()) || "".equals(dboPassword.trim())) {
+      printError("changePassword()", "no argument can be null, empty, or all whitespace");
+      return false;
     }
 
-    // return user names
-    return Optional.of(USERS);
+    // if new password has leading or trailing whitespace, throw error (bit.ly/2Sj7BtE)
+    if (!newPassword.trim().equals(newPassword)) {
+      printError("changePassword()", "password cannot have leading or trailing whitespace");
+      return false;
+    }
+
+    //--------------------------------------------------------------------------
+    //  verify that `username` is in the list of users
+    //--------------------------------------------------------------------------
+
+    Optional<List<String>> OPTUSERS = users();
+    if (!OPTUSERS.isPresent()) return false;
+    List<String> USERS = OPTUSERS.get();
+
+    // capitalise username
+    String USERNAME = username.toUpperCase();
+
+    if (!USERS.contains(USERNAME)) {
+      printError("resetPassword()", "user '" + username + "' doesn't exist");
+      return false;
+    }
+
+    //--------------------------------------------------------------------------
+    //  verify DBO password
+    //--------------------------------------------------------------------------
+
+    // if current user is not DBO, they can't use this method
+    if(!userIsDBO()) {
+      printError("resetPassword()", "only database owner can reset user passwords");
+      return false;
+    }
+
+    Optional<String> OPTOWNER = user();
+    if (!OPTOWNER.isPresent()) return false;
+    String OWNER = OPTOWNER.get();
+
+    try { // verify the DBO's password
+      // get the salt and hash from the DBO's SECURE table
+      resultSet = this.statement.executeQuery("select * from " + OWNER + ".SECURE");
+      resultSet.next();
+
+      String salt = resultSet.getString(1);
+      String hash = resultSet.getString(2);
+
+      // check if given password can be transformed to hash in database
+      boolean isValid = PasswordUtils.verifyPassword(dboPassword, hash, salt);
+
+      // if valid, continue, otherwise return false
+      if (!isValid) {
+        printError("resetPassword()", "could not verify database owner's password");
+        return false;
+      }
+
+      ps_chpwd.setString(1, USERNAME);
+      ps_chpwd.setString(2, newPassword);
+
+      // generate salt and hash password
+      Optional<String> optsalt = PasswordUtils.generateSalt(512);
+      if (!optsalt.isPresent()) return false;
+      salt = optsalt.get();
+
+      Optional<String> opthash = PasswordUtils.hashPassword(newPassword, salt);
+      if (!opthash.isPresent()) return false;
+      hash = opthash.get();
+
+      // update salt and hash in database
+      this.statement.execute("update " + USERNAME + ".SECURE set hash = '" +
+        hash + "', salt = '" + salt + "'");
+
+      // don't update password until hash and salt are updated
+      ps_chpwd.execute();
+
+      // inform the user that the password has been successfully changed
+      printMessage("changePassword()", "password successfully changed");
+      return true;
+
+    // catch SQL errors
+    } catch (SQLException ex) {
+      printSQLException("changePassword()", ex);
+      return false;
+    }
   }
+
+
+
+  ///---------------------------------------------------------------------------
+  ///
+  ///  GET LIST OF TABLES, PRINT A TABLE, RETURN A TABLE AS List<List<String>>
+  ///
+  ///---------------------------------------------------------------------------
 
   /**
     * Returns a {@link List} containing the names of all user-created tables in
@@ -757,57 +961,277 @@ public final class Database {
     *
     **/
   public List<String> tables() {
+
+    // list of tables to return
     List<String> TABLES = new ArrayList<>();
 
-    try { // can use toUpperCase() here because usernames are case-insensitive
+    // if there's a problem getting the current user, fail fast
+    Optional<String> OPTUSER = user();
+    if (!OPTUSER.isPresent()) return TABLES;
+    String USER = OPTUSER.get();
 
-      String OWNER = owner().orElseThrow(() -> new IllegalStateException(
-        "tables() : error getting database owner"));
+    // is the current user the DBO?
+    boolean isDBO = userIsDBO();
 
-      String USER  =  user().orElseThrow(() -> new IllegalStateException(
-        "tables() : error getting current user"));
-
-      // get table names, types, and schemas, and select only user-created tables
+    try { // get table names, types, and schemas, and select only user-created tables
       resultSet = this.statement.executeQuery("select sys.systables.tablename, " +
         "sys.systables.tabletype, sys.sysschemas.schemaname from sys.systables " +
         "inner join sys.sysschemas on sys.systables.schemaid = sys.sysschemas.schemaid " +
         "where sys.systables.tabletype = 'T'"); // 'T' signifies user-created tables
 
       while (resultSet.next()) { // loop over user-created tables
-        String TABLE = resultSet.getString(1).toUpperCase();
+        String TABLE  = resultSet.getString(1).toUpperCase();
         String SCHEMA = resultSet.getString(3).toUpperCase();
 
-        // only return this user's tables; or, if DBO, all tables
-        if (OWNER.equals(USER) || SCHEMA.equals(USER)) {
-
-          // only show non-DBO users non-SECURE tables
-          if (!TABLE.equals("SECURE") || OWNER.equals(USER))
-            TABLES.add(String.format("%s.%s", SCHEMA, TABLE));
-        }
+        // only return this user's non-SECURE tables; or, if DBO, all tables in database
+        if (isDBO || (SCHEMA.equals(USER) && !TABLE.equals("SECURE")))
+          TABLES.add(String.format("%s.%s", SCHEMA, TABLE));
       }
 
-    // catch SQL errors
+    // catch SQL errors -- return empty list if there was a problem
     } catch (SQLException ex) {
-      printSQLException(ex);
+      printSQLException("tables()", ex);
       TABLES.clear(); // clear half-filled list
-
-    // print message we defined above
-    } catch (IllegalStateException ex) {
-      System.err.println(ex.getMessage());
     }
 
     // return table names
     return TABLES;
   }
 
-  /// from: bit.ly/2zJV23d
-  private static void printSQLException(SQLException e) {
-    while (e != null) {
-      System.err.println("\n----- SQLException -----");
-      System.err.println("  SQL State:  " + e.getSQLState());
-      System.err.println("  Error Code: " + e.getErrorCode());
-      System.err.println("  Message:    " + e.getMessage());
-      e = e.getNextException();
+  /**
+    * Prints a table to the standard output device, provided the current user
+    * has permission to view that table.
+    *
+    * <p>Regular users can print a table using its fully-qualified name (like
+    * {@code printTable("Bob.contacts")}) or its shortened table name (like
+    * {@code printTable("contacts")}), but the database owner must always use
+    * fully-qualified names.</p>
+    *
+    * @param tableName name of table to print
+    * @param columnWidth printed width (in characters) of each column
+    *
+    * @see tables tables() to view tables available to the current user
+    * @see table table() to get a given table as a {@code List<List<String>>}
+    *
+    **/
+  public void printTable (String tableName, int columnWidth) {
+
+    // first, get table; if null, quit
+    List<List<String>> table = table(tableName);
+    if (table == null) return;
+
+    // if table has no rows, quit
+    int nRows = table.size();
+    if (nRows < 1) return;
+    int nCols = table.get(0).size();
+
+    // insert an empty row in the table to separate headers from data
+    String empty = String.join("", Collections.nCopies(columnWidth, "-"));
+    List<String> br = new ArrayList<>(Collections.nCopies(nCols, empty));
+    table.add(1, br);
+
+    // print table by looping over rows
+    System.out.println();
+    for (List<String> row : table)
+      System.out.println(row.stream()
+        .map(e -> {
+          String temp = String.format("%-" + columnWidth + "." + columnWidth + "s", e);
+          if (e.length() > columnWidth) {
+            temp = temp.substring(0, columnWidth-3);
+            temp = temp + "...";
+          } return temp;
+        }).collect(Collectors.joining(" | ", "    | ", " |")));
+  }
+
+  /**
+    * Returns the specified table as a {@code List<List<String>>}, provided the
+    * current user has permission to view that table.
+    *
+    * <p>If the table with name {@code tableName} exists, this method will
+    * return that table as a {@link List} of {@code List<String>}, where the
+    * inner lists are the rows of the table and the {@link String}s they hold
+    * are the data in each column of the table. Rows are ordered top-to-bottom
+    * and columns are ordered left-to-right, both with 0-indexing.</p>
+    *
+    * <p>If the table has zero rows, its column headers will still be returned,
+    * and if a table doesn't exist (or can't be accessed by the current user),
+    * an empty {@link List} will be returned.</p>
+    *
+    * @param tableName name of the table of interest
+    *
+    * @return the specified table as a {@link List} of {@code List<String>}
+    * rows, if the table exists and the user has permission to view it
+    *
+    **/
+  public List<List<String>> table (String tableName) {
+
+    // return value
+    List<List<String>> retval = new ArrayList<>();
+
+    // if tableName is null, empty, or all whitespace, throw error
+    if (tableName == null || "".equals(tableName.trim())) {
+      printError("table()", "tableName cannot be null, empty, or all whitespace");
+      return null;
+    }
+
+    // move table name to all-uppercase
+    String TABLE = tableName.toUpperCase();
+
+    // we can't use a prepared statement for table names, so instead, just
+    // check if the table is in the list of available tables, and if not,
+    // print an error and return
+
+    if (!tables().contains(TABLE)) {
+      printError("printTable()", "table '" + tableName + "' cannot be found");
+      return retval;
+    }
+
+    try {
+      resultSet = this.statement.executeQuery("select * from " + TABLE);
+      rsmd = resultSet.getMetaData();
+      int numberOfColumns = rsmd.getColumnCount();
+      int rowCount = 0;
+
+      // add column label row to table
+      retval.add(new ArrayList<String>());
+
+      // get current row
+      List<String> row = retval.get(rowCount);
+
+      // add column names to 0th row of table
+      for (int cc = 1; cc <= numberOfColumns; ++cc)
+        row.add(rsmd.getColumnName(cc));
+
+      while(resultSet.next()) {
+
+        // increment the row count
+        ++rowCount;
+
+        // add a new row to retval
+        retval.add(new ArrayList<String>());
+
+        // get current row
+        row = retval.get(rowCount);
+
+        // loop over columns and add to this row
+        for (int ii = 1; ii <= numberOfColumns; ++ii)
+          row.add(resultSet.getString(ii));
+      }
+
+      return retval;
+
+    // catch SQL errors
+    } catch (SQLException ex) {
+      printSQLException("printTable()", ex);
+      retval.clear(); // clear the half-initialised list
+      return retval;
+  } }
+
+  ///---------------------------------------------------------------------------
+  ///
+  ///  GET USER, OWNER; FIND OUT IF CURRENT USER IS DATABASE OWNER
+  ///
+  ///---------------------------------------------------------------------------
+
+  /**
+    * Returns the name of the current user, in all-uppercase letters, wrapped in
+    * an {@link Optional}.
+    *
+    * <p>Returns an empty {@link Optional} and prints an {@link SQLException} to
+    * the console if there was a problem accessing the {@code database}.</p>
+    *
+    * @return the name of the current user, in all-uppercase letters, wrapped in
+    * an {@link Optional}
+    *
+    **/
+  public Optional<String> user() {
+    try {
+      resultSet = statement.executeQuery("values current_user");
+      resultSet.next();
+      return Optional.of(resultSet.getString(1).toUpperCase());
+
+    // catch SQL errors -- return empty if there was a problem
+    } catch (SQLException ex) {
+      printSQLException("user()", ex);
+      return Optional.empty();
+  } }
+
+  /**
+    * Returns the username of the database owner (DBO), in all-uppercase
+    * letters, wrapped in an {@link Optional}.
+    *
+    * <p>Returns an empty {@link Optional} and prints an {@link SQLException} to
+    * the console if there was a problem accessing the {@code database}.</p>
+    *
+    * @return the username of the database owner (DBO), in all-uppercase
+    * letters, wrapped in an {@link Optional}.
+    *
+    **/
+  public Optional<String> owner() {
+
+    try { // DBO cannot be changed; creator of system tables is therefore DBO
+      resultSet = this.statement.executeQuery(
+        "select authorizationid from sys.sysschemas where schemaname='SYS'");
+
+      resultSet.next();
+      return Optional.of(resultSet.getString(1).toUpperCase());
+
+    // catch SQL errors -- return empty if there was a problem
+    } catch (SQLException ex) {
+      printSQLException("owner()", ex);
+      return Optional.empty();
+    }
+  }
+
+  /**
+    * Returns {@code true} if and only if the current user is the database owner.
+    *
+    * <p>Returns {@code false} if there was a problem getting the name of the
+    * database owner or the current user, or if the current user is not the
+    * database owner.</p>
+    *
+    * @return {@code true} if and only if the current user is the database owner
+    *
+    **/
+  public boolean userIsDBO() {
+
+    Optional<String> OPTOWNER = owner();
+    Optional<String> OPTUSER  =  user();
+
+    if (!OPTOWNER.isPresent() || !OPTUSER.isPresent()) {
+      printError("userIsDBO()", "problem acquiring current user or database owner");
+      return false;
+
+    } else return OPTOWNER.get().equals(OPTUSER.get());
+  }
+
+  ///---------------------------------------------------------------------------
+  ///
+  ///  PRIVATE MESSAGING METHODS
+  ///
+  ///---------------------------------------------------------------------------
+
+  // prints an error message to the standard error stream
+  private static void printError (String methodSignature, String message) {
+    System.err.printf("%n         ERROR | %s : %s%n%n", methodSignature, message);
+  }
+
+  // prints a warning message to the standard error stream
+  private static void printWarning (String methodSignature, String message) {
+    System.err.printf("%n       WARNING | %s : %s%n%n", methodSignature, message);
+  }
+
+  // prints a message to the standard error stream
+  private static void printMessage (String methodSignature, String message) {
+    System.err.printf("%n       MESSAGE | %s : %s%n%n", methodSignature, message);
+  }
+
+  // prints an SQLException message to the standard error stream (bit.ly/2zJV23d)
+  private static void printSQLException (String methodSignature, SQLException ex) {
+    while (ex != null) {
+      System.err.printf("%n  SQLException | %s : %s [SQL State: %s, Error Code: %d]",
+        methodSignature, ex.getMessage(), ex.getSQLState(), ex.getErrorCode());
+      ex = ex.getNextException();
     } System.err.println();
   }
 
