@@ -99,7 +99,7 @@ public final class Database {
     this.statement = statement;
   }
 
-  // database is accessed via initialise() method
+  // database is accessed via connect() method
   // only returns non-null if everything succeeds
   // from then on, returns the same connection object
 
@@ -127,7 +127,7 @@ public final class Database {
     * exists; resets all variables.
     *
     **/
-  public void exit() {
+  public static void disconnect() {
 
     try {
       // shut down database, always throws an SQLException (http://bit.ly/2AcngnA)
@@ -206,11 +206,11 @@ public final class Database {
     * a problem
     *
     **/
-  public static Optional<Database> initialise (
+  public static Optional<Database> connect (
     String databaseName, String bootPassword, String userName, String userPassword) {
 
     if (database != null) {
-      printWarning("initialise()", "database already initialised");
+      printWarning("connect()", "database already initialised");
       return Optional.of(database);
     }
 
@@ -281,7 +281,7 @@ public final class Database {
           ".SECURE (salt, hash) values ('" + salt + "', '" + hash + "')");
 
       } catch (SQLException ex) {
-        printSQLException("initialise()", ex);
+        printSQLException("connect()", ex);
         return Optional.empty();
     } }
 
@@ -302,14 +302,14 @@ public final class Database {
           "'derby.database.fullAccessUsers', '" + userName + "')");
 
       } catch (SQLException ex) {
-        printError("initialise()", "error giving database owner full read/write access to database");
+        printError("connect()", "error giving database owner full read/write access to database");
         database = null; // reset mis-instantiated database
         return Optional.empty();
     } }
 
     // if we've gotten this far, the connection is good; return the new db
     derbyName = databaseName;
-    printMessage("initialise()", "database successfully initialised");
+    printMessage("connect()", "database successfully initialised");
     return Optional.of(database);
   }
 
