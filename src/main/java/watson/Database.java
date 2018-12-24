@@ -104,6 +104,7 @@ public final class Database {
   // from then on, returns the same connection object
 
   private static Database database = null;
+  private static String derbyName = null;
   private static boolean newDB = false;
   private static ResultSet resultSet = null;
   private static ResultSetMetaData rsmd = null;
@@ -112,14 +113,38 @@ public final class Database {
   //  see: https://docs.oracle.com/javase/9/docs/api/java/sql/PreparedStatement.html
   //  and: http://bobby-tables.com/java
 
-  private static PreparedStatement ps_chpwd;   // for changing password
-  private static PreparedStatement ps_adduser; // for adding a new user
+  private static PreparedStatement ps_chpwd = null;   // for changing password
+  private static PreparedStatement ps_adduser = null; // for adding a new user
 
   ///---------------------------------------------------------------------------
   ///
-  ///  CONNECT TO / CREATE NEW DATABASE; RETURN Database OBJECT
+  ///  CONNECT TO / DISCONNECT FROM / CREATE NEW DATABASE; RETURN Database OBJECT
   ///
   ///---------------------------------------------------------------------------
+
+  /**
+    * Closes the connection to the current database, if such a connection
+    * exists; resets all variables.
+    *
+    **/
+  public void exit() {
+
+    try {
+      // shut down database, always throws an SQLException (http://bit.ly/2AcngnA)
+      DriverManager.getConnection("jdbc:derby:" + derbyName + ";shutdown=true");
+
+    } catch (SQLException ex) {
+      // do nothing, this is expected
+    }
+
+    // reset all variables
+    database   = null;
+    newDB      = false;
+    resultSet  = null;
+    rsmd       = null;
+    ps_chpwd   = null;
+    ps_adduser = null;
+  }
 
   /**
     * Constructs a properly-formatted {@code jdbc:derby} URL, given the database
@@ -266,13 +291,6 @@ public final class Database {
     // list of users, and give the DBO full read/write access to the database
 
     if (newDB) {
-
-//      if (!database.addUser(userName, userPassword, userPassword)) {
-//        printError("initialise()", "error adding database owner to database");
-//        database = null; // reset mis-instantiated database
-//        return Optional.empty();
-//      }
-
       try { // add the DBO to the list of full read/write access users
 
         ps_adduser.setString(1, userName);
@@ -290,6 +308,7 @@ public final class Database {
     } }
 
     // if we've gotten this far, the connection is good; return the new db
+    derbyName = databaseName;
     printMessage("initialise()", "database successfully initialised");
     return Optional.of(database);
   }
@@ -844,20 +863,46 @@ public final class Database {
       return false;
   } }
 
-/// DBO-only method to reset user password
-
+  /**
+    * Sets the password of the user with the given {@code username} to
+    * {@code newPassword}, provided that the current user is the DBO.
+    *
+    * <p>An error will be printed and {@code false} will be returned from this
+    * method if any of the following are true:</p>
+    * <ul>
+    * <li>if any argument of this method is {@code null}, empty, or all whitespace</li>
+    * <li>if the {@code newPassword} has any leading or trailing whitespace</li>
+    * <li>if there's a problem acquiring the username of the DBO or the current user</li>
+    * <li>if {@code username} references a user that doesn't exist</li>
+    * <li>if the current user is not the database owner</li>
+    * <li>if the database owner's password ({@code dboPassword}) was entered incorrectly</li>
+    * <li>if there was a problem hashing the new password</li>
+    * <li>if there was any problem communicating with the database</li>
+    * </ul>
+    *
+    * <p>...otherwise, the specified user's password will be changed to
+    * {@code newPassword} and {@code true} will be returned.</p>
+    *
+    * @param username user whose password should be reset
+    * @param newPassword user's password will be set to this new password
+    * @param dboPassword password of the database owner
+    *
+    * @return {@code true} if and only if the specified user's password was
+    * successfully changed to the {@code newPassword}
+    *
+    **/
   public boolean resetPassword (String username, String newPassword, String dboPassword) {
 
     // if any argument is null or empty, throw an error
     if (username == null || newPassword == null || dboPassword == null ||
           "".equals(username.trim()) || "".equals(newPassword.trim()) || "".equals(dboPassword.trim())) {
-      printError("changePassword()", "no argument can be null, empty, or all whitespace");
+      printError("resetPassword()", "no argument can be null, empty, or all whitespace");
       return false;
     }
 
     // if new password has leading or trailing whitespace, throw error (bit.ly/2Sj7BtE)
     if (!newPassword.trim().equals(newPassword)) {
-      printError("changePassword()", "password cannot have leading or trailing whitespace");
+      printError("resetPassword()", "password cannot have leading or trailing whitespace");
       return false;
     }
 
@@ -928,17 +973,15 @@ public final class Database {
       ps_chpwd.execute();
 
       // inform the user that the password has been successfully changed
-      printMessage("changePassword()", "password successfully changed");
+      printMessage("resetPassword()", "password successfully changed");
       return true;
 
     // catch SQL errors
     } catch (SQLException ex) {
-      printSQLException("changePassword()", ex);
+      printSQLException("resetPassword()", ex);
       return false;
     }
   }
-
-
 
   ///---------------------------------------------------------------------------
   ///
