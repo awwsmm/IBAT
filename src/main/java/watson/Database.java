@@ -210,7 +210,7 @@ public final class Database {
     String databaseName, String bootPassword, String userName, String userPassword) {
 
     if (database != null) {
-      printWarning("connect()", "database already initialised");
+      IO.printWarning("connect()", "database already initialised");
       return Optional.of(database);
     }
 
@@ -281,7 +281,7 @@ public final class Database {
           ".SECURE (salt, hash) values ('" + salt + "', '" + hash + "')");
 
       } catch (SQLException ex) {
-        printSQLException("connect()", ex);
+        IO.printSQLException("connect()", ex);
         return Optional.empty();
     } }
 
@@ -302,14 +302,14 @@ public final class Database {
           "'derby.database.fullAccessUsers', '" + userName + "')");
 
       } catch (SQLException ex) {
-        printError("connect()", "error giving database owner full read/write access to database");
+        IO.printError("connect()", "error giving database owner full read/write access to database");
         database = null; // reset mis-instantiated database
         return Optional.empty();
     } }
 
     // if we've gotten this far, the connection is good; return the new db
     derbyName = databaseName;
-    printMessage("connect()", "database successfully initialised");
+    IO.printMessage("connect()", "database successfully initialised");
     return Optional.of(database);
   }
 
@@ -346,7 +346,7 @@ public final class Database {
 
     // if any parameters were passed as null, constructURL returns empty
     if (!optSB.isPresent()) {
-      printError("getConnection()", "illegal argument(s) -- no parameter can be null");
+      IO.printError("getConnection()", "illegal argument(s) -- no parameter can be null");
       return Optional.empty();
     } StringBuilder sb = optSB.get();
 
@@ -362,7 +362,7 @@ public final class Database {
 
       // catch common cases
       if (exi == 40000 && "08004".equals(exs)) {
-        printError("getConnection()", "invalid username or password");
+        IO.printError("getConnection()", "invalid username or password");
         return Optional.empty();
       }
 
@@ -388,8 +388,8 @@ public final class Database {
       } catch (SQLException e2) {
 
         // unusual case? print error codes:
-        printSQLException("getConnection()", ex);
-        printSQLException("getConnection()", e2);
+        IO.printSQLException("getConnection()", ex);
+        IO.printSQLException("getConnection()", e2);
         return Optional.empty();
   } } }
 
@@ -428,13 +428,381 @@ public final class Database {
       ps_adduser = connection.prepareStatement(
         "call SYSCS_UTIL.SYSCS_CREATE_USER(?, ?)");
 
+/*
+      // add contact to group
+      ps_addToGroup = connection.prepareStatement(
+        "insert into 
+
+this.statement.execute("insert into " + USER + ".GROUPS(name, contactid) values ('" +
+          GROUPNAME
+*/
+
       // return the statement wrapped in an Optional
       return Optional.of(connection.createStatement());
 
     } catch (SQLException ex) {
-      printSQLException("getStatement()", ex);
+      IO.printSQLException("getStatement()", ex);
       return Optional.empty();
   } }
+
+  ///---------------------------------------------------------------------------
+  ///
+  ///  ADD, REMOVE, UPDATE CONTACTS IN CONTACTS TABLE
+  ///
+  ///---------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+  // adds the given Contact to the current user's CONTACTS table
+  public boolean addContact (Contact contact) {
+
+    // if current user is DBO, they can't use this method
+    if (userIsDBO()) {
+      IO.printError("addContact()", "only regular (non-DBO) users have lists of contacts");
+      return false;
+    }
+
+    // if contact is null, throw error
+    if (contact == null) {
+      IO.printError("addContact()", "contact cannot be null");
+      return false;
+    }
+
+    Optional<String> OPTUSER = user();
+    if (!OPTUSER.isPresent()) return false;
+    String USER = OPTUSER.get();
+
+    // insert Contact into CONTACTS table
+    try {
+      this.statement.execute("insert into " + USER + ".CONTACTS" + contact);
+      IO.printMessage("addContact()", "contact successfully added");
+      return true;
+
+    // catch SQL exceptions
+    } catch (SQLException ex) {
+      IO.printSQLException("addContact()", ex);
+      return false;
+    }
+  }
+
+
+
+
+
+
+  // updates the contact with the given ID number
+  public boolean updateContact (int ID, Contact contact) {
+
+    // if current user is DBO, they can't use this method
+    if (userIsDBO()) {
+      IO.printError("updateContact()", "only regular (non-DBO) users have lists of contacts");
+      return false;
+    }
+
+    // if contact is null, throw error
+    if (contact == null) {
+      IO.printError("updateContact()", "contact cannot be null");
+      return false;
+    }
+
+    Optional<String> OPTUSER = user();
+    if (!OPTUSER.isPresent()) return false;
+    String USER = OPTUSER.get();
+
+    try { // update Contact in CONTACTS table
+
+      // get number of rows affected (if 0, return false)
+      resultSet = this.statement.executeQuery("select * from " + USER + ".CONTACTS where id = " + ID);
+
+      int rowCount = 0;
+      while (resultSet.next()) { ++rowCount; }
+
+      if (rowCount < 1) {
+        IO.printWarning("updateContact()", "no contacts affected");
+        return false;
+      }
+
+      String updates = contact.info.entrySet().stream().map(e -> {
+          String k = e.getKey();
+          String v = e.getValue().getValue();
+          if (v == null) return (k + " = null");
+          else return (k + " = '" + v + "'");
+        }).collect(Collectors.joining(", "));
+
+      this.statement.execute("update " + USER + ".CONTACTS set " + updates + " where id = " + ID);
+      IO.printMessage("updateContact()", "contact successfully updated");
+      return true;
+
+    // catch SQL exceptions
+    } catch (SQLException ex) {
+      IO.printSQLException("updateContact()", ex);
+      return false;
+    }
+  }
+
+
+
+
+
+
+
+  // deletes the contacts with the given ID numbers
+  public boolean deleteContacts (int... IDs) {
+
+    // if current user is DBO, they can't use this method
+    if (userIsDBO()) {
+      IO.printError("deleteContacts()", "only regular (non-DBO) users have lists of contacts");
+      return false;
+    }
+
+    Optional<String> OPTUSER = user();
+    if (!OPTUSER.isPresent()) return false;
+    String USER = OPTUSER.get();
+
+    if (IDs.length < 1) {
+      IO.printError("deleteContacts()", "no contact IDs given");
+      return false;
+    }
+
+    try { // delete Contacts from CONTACTS table
+
+      // get number of rows affected (if 0, return false)
+
+      int rowCount = 0;
+      for (int ID : IDs) {
+        resultSet = this.statement.executeQuery("select * from " + USER + ".CONTACTS where id = " + ID);
+        while (resultSet.next()) { ++rowCount; }
+      }
+
+      if (rowCount < 1) {
+        IO.printWarning("deleteContacts()", "no contacts affected");
+        return false;
+      }
+
+      for (int ID : IDs)
+        this.statement.execute("delete from " + USER + ".CONTACTS where id = " + ID);
+
+      IO.printMessage("deleteContacts()", "contacts successfully deleted");
+      return true;
+
+    // catch SQL exceptions
+    } catch (SQLException ex) {
+      IO.printSQLException("deleteContacts()", ex);
+      return false;
+    }
+  }
+
+
+
+
+
+  // add one or more users to one group
+  public boolean addToGroup (String groupName, int... IDs) {
+
+    // if current user is DBO, they can't use this method
+    if (userIsDBO()) {
+      IO.printError("addToGroup()", "only regular (non-DBO) users have lists of groups");
+      return false;
+    }
+
+    Optional<String> OPTUSER = user();
+    if (!OPTUSER.isPresent()) return false;
+    String USER = OPTUSER.get();
+
+    if (IDs.length < 1) {
+      IO.printError("addToGroup()", "no contact IDs given");
+      return false;
+    }
+
+    // if groupName is null, empty, or all whitespace, throw error
+    if (groupName == null || "".equals(groupName.trim())) {
+      IO.printError("addToGroup()", "group name cannot be null, empty, or all whitespace");
+      return false;
+    }
+
+    // only allow alphanumeric characters (and underscores) in group names to
+    // prevent SQL injection attacks; use regex to find any non-alnum chars
+
+    Pattern p = Pattern.compile("[^a-zA-Z0-9_]");
+    Matcher m = p.matcher(groupName);
+
+    if (m.find()) {
+      IO.printError("addToGroup()", "group names can only contain ASCII alphanumeric characters and underscores");
+      return false;
+    }
+
+    try { // add Contacts to group
+
+      // get number of rows affected (if 0, return false)
+
+      int rowCount = 0;
+      for (int ID : IDs) {
+        resultSet = this.statement.executeQuery("select * from " + USER + ".CONTACTS where id = " + ID);
+        while (resultSet.next()) { ++rowCount; }
+      }
+
+      if (rowCount < 1) {
+        IO.printWarning("addToGroup()", "no contacts affected");
+        return false;
+      }
+
+      // move groupName to all-caps
+      String GROUPNAME = groupName.toUpperCase();
+
+      for (int ID : IDs)
+        this.statement.execute("insert into " + USER + ".GROUPS(name, contactid) values ('" +
+          GROUPNAME + "', " + ID + ")");
+
+      IO.printMessage("addToGroup()", "successfully added to group");
+      return true;
+
+    // catch SQL exceptions
+    } catch (SQLException ex) {
+      IO.printSQLException("addToGroup()", ex);
+      return false;
+    }
+  }
+
+
+
+  // remove one or more users from one group
+  public boolean removeFromGroup (String groupName, int... IDs) {
+
+    // if current user is DBO, they can't use this method
+    if (userIsDBO()) {
+      IO.printError("removeFromGroup()", "only regular (non-DBO) users have lists of groups");
+      return false;
+    }
+
+    Optional<String> OPTUSER = user();
+    if (!OPTUSER.isPresent()) return false;
+    String USER = OPTUSER.get();
+
+    if (IDs.length < 1) {
+      IO.printError("removeFromGroup()", "no contact IDs given");
+      return false;
+    }
+
+    // if groupName is null, empty, or all whitespace, throw error
+    if (groupName == null || "".equals(groupName.trim())) {
+      IO.printError("removeFromGroup()", "group name cannot be null, empty, or all whitespace");
+      return false;
+    }
+
+    try { // remove Contacts from group
+
+      // get current groups from GROUPS table
+      List<String> GROUPS = new ArrayList<String>();
+      resultSet = this.statement.executeQuery("select distinct name from " + USER + ".GROUPS");
+      while (resultSet.next()) GROUPS.add(resultSet.getString(1));
+
+      // if no groups or given group doesn't exist, return false
+      String GROUPNAME = groupName.toUpperCase(); // capitalise
+      if (GROUPS.size() < 1 || !GROUPS.contains(GROUPNAME)) {
+        IO.printWarning("removeFromGroup()", "group doesn't exist; no contacts affected");
+        return false;
+      }
+
+      // get number of rows affected (if 0, return false)
+      int rowCount = 0;
+      for (int ID : IDs) {
+        resultSet = this.statement.executeQuery("select * from " + USER + ".GROUPS " +
+          "where contactid = " + ID + " and name = '" + GROUPNAME + "'");
+        while (resultSet.next()) { ++rowCount; }
+      }
+
+      if (rowCount < 1) {
+        IO.printWarning("removeFromGroup()", "no contacts affected");
+        return false;
+      }
+
+      for (int ID : IDs)
+        this.statement.execute("delete from " + USER + ".GROUPS where contactid = " +
+          ID + " and name = '" + GROUPNAME + "'");
+
+      IO.printMessage("removeFromGroup()", "successfully removed from group");
+      return true;
+
+    // catch SQL exceptions
+    } catch (SQLException ex) {
+      IO.printSQLException("removeFromGroup()", ex);
+      return false;
+    }
+  }
+
+
+
+  // deletes a group (removes all members from that group)
+  public boolean deleteGroup (String groupName) {
+
+    // if current user is DBO, they can't use this method
+    if (userIsDBO()) {
+      IO.printError("deleteGroup()", "only regular (non-DBO) users have lists of groups");
+      return false;
+    }
+
+    Optional<String> OPTUSER = user();
+    if (!OPTUSER.isPresent()) return false;
+    String USER = OPTUSER.get();
+
+    // if groupName is null, empty, or all whitespace, throw error
+    if (groupName == null || "".equals(groupName.trim())) {
+      IO.printError("deleteGroup()", "group name cannot be null, empty, or all whitespace");
+      return false;
+    }
+
+/// FIX THIS
+
+    try { // remove Contacts from group
+
+      // get current groups from GROUPS table
+      List<String> GROUPS = new ArrayList<String>();
+      resultSet = this.statement.executeQuery("select distinct name from " + USER + ".GROUPS");
+      while (resultSet.next()) GROUPS.add(resultSet.getString(1));
+
+      // if no groups or given group doesn't exist, return true
+      String GROUPNAME = groupName.toUpperCase(); // capitalise
+      if (GROUPS.size() < 1 || !GROUPS.contains(GROUPNAME)) {
+        IO.printWarning("deleteGroup()", "group doesn't exist; no contacts affected");
+        return true;
+      }
+
+      // get number of rows affected (if 0, return false)
+      int rowCount = 0;
+      for (int ID : IDs) {
+        resultSet = this.statement.executeQuery("select * from " + USER + ".GROUPS " +
+          "where name = '" + GROUPNAME + "'");
+        while (resultSet.next()) { ++rowCount; }
+      }
+
+      if (rowCount < 1) {
+        IO.printWarning("deleteGroup()", "no contacts affected");
+        return false;
+      }
+
+      for (int ID : IDs)
+        this.statement.execute("delete from " + USER + ".GROUPS where contactid = " +
+          ID + " and name = '" + GROUPNAME + "'");
+
+      IO.printMessage("deleteGroup()", "successfully removed from group");
+      return true;
+
+    // catch SQL exceptions
+    } catch (SQLException ex) {
+      IO.printSQLException("deleteGroup()", ex);
+      return false;
+    }
+  }
+
+
+
+
 
   ///---------------------------------------------------------------------------
   ///
@@ -463,7 +831,7 @@ public final class Database {
 
     // if current user is not DBO, they can't use this method
     if(!userIsDBO()) {
-      printError("users()", "only database owner can view list of users");
+      IO.printError("users()", "only database owner can view list of users");
       return Optional.empty();
     }
 
@@ -476,7 +844,7 @@ public final class Database {
 
     // catch SQL errors -- return empty list if there was a problem
     } catch (SQLException ex) {
-      printSQLException("users()", ex);
+      IO.printSQLException("users()", ex);
       USERS.clear(); // clear half-filled list
     }
 
@@ -515,13 +883,13 @@ public final class Database {
 
     if (username == null || password == null ||
           "".equals(username.trim()) || "".equals(password.trim())) {
-      printError("addUser()", "neither username nor password can be null, empty, or all whitespace");
+      IO.printError("addUser()", "neither username nor password can be null, empty, or all whitespace");
       return false;
     }
 
     // if password has leading or trailing whitespace, throw error (bit.ly/2Sj7BtE)
     if (!password.trim().equals(password)) {
-      printError("addUser()", "password cannot have leading or trailing whitespace");
+      IO.printError("addUser()", "password cannot have leading or trailing whitespace");
       return false;
     }
 
@@ -532,7 +900,7 @@ public final class Database {
     Matcher m = p.matcher(username);
 
     if (m.find()) {
-      System.err.println("addUser() : usernames can only contain ASCII alphanumeric characters and underscores");
+      IO.printError("addUser()", "usernames can only contain ASCII alphanumeric characters and underscores");
       return false;
     }
 
@@ -559,7 +927,7 @@ public final class Database {
 
     // if current user is not DBO, they can't use this method
     if(!userIsDBO()) {
-      System.err.println("addUser() : only database owner can add new users.");
+      IO.printError("addUser()", "only database owner can add new users");
       return false;
     }
 
@@ -576,13 +944,13 @@ public final class Database {
 
       // if valid, continue, otherwise return false
       if (!isValid) {
-        printError("addUser()", "could not verify database owner's password");
+        IO.printError("addUser()", "could not verify database owner's password");
         return false;
       }
 
     // catch SQL exceptions
     } catch (SQLException ex) {
-      printSQLException("addUser()", ex);
+      IO.printSQLException("addUser()", ex);
       return false;
     }
 
@@ -616,16 +984,28 @@ public final class Database {
       String sTable = USERNAME + ".SECURE";   // user's hashed password and salt
 
       // create 'CONTACTS' table
+      //  auto-increment: https://www.binarytides.com/create-autoincrement-columnfield-in-apache-derby/
+      //  phone numbers: https://www.cm.com/blog/how-to-format-international-telephone-numbers/
+
       if (!OWNER.equals(USERNAME) && !TABLES.contains(cTable)) {
-        this.statement.execute("create table " + cTable + "(test int)");
-        this.statement.execute("insert into " + cTable  + "(test) values " + 4);
+
+        // get column names and descriptions from Contact class
+        Contact c = new Contact();
+
+        // Contact class defines schema for Contacts table
+        this.statement.execute("create table " + cTable +
+          "(id int not null generated always as identity (start with 1, increment by 1), " +
+          (c.info.entrySet().stream().map(e -> e.getKey() + " " + e.getValue().getKey()).collect(Collectors.joining(", "))) +
+          ", constraint primary_key_c primary key (id))");
         this.statement.execute("grant all privileges on " + cTable + " to " + username);
       }
 
       // create 'GROUPS' table
       if (!OWNER.equals(USERNAME) && !TABLES.contains(gTable)) {
-        this.statement.execute("create table " + gTable + "(test int)");
-        this.statement.execute("insert into " + gTable  + "(test) values " + 5);
+        this.statement.execute("create table " + gTable +
+          "(id int not null generated always as identity (start with 1, increment by 1), " +
+          "name varchar(40), contactid int" +
+          ", constraint primary_key_g primary key (id))");
         this.statement.execute("grant all privileges on " + gTable + " to " + username);
       }
 
@@ -665,7 +1045,7 @@ public final class Database {
       // if we've made it here and no errors have been thrown...
       // ...we've successfully added a new user to the database!
 
-      printMessage("addUser()", "user '" + username + "' successfully added");
+      IO.printMessage("addUser()", "user '" + username + "' successfully added");
       return true;
 
     // catch SQL errors
@@ -676,13 +1056,13 @@ public final class Database {
 
       // catch common cases
       if        (exi == 30000 && "42X01".equals(exs)) {
-        printError("addUser()", "username cannot be a reserved SQL word (see: bit.ly/2Abbzxc)");
+        IO.printError("addUser()", "username cannot be a reserved SQL word (see: bit.ly/2Abbzxc)");
 
       } else if (exi == 30000 && "28502".equals(exs)) {
-        printError("addUser()", "invalid username \"" + username + "\"");
+        IO.printError("addUser()", "invalid username \"" + username + "\"");
 
       // unusual case? print error codes:
-      } else printSQLException("addUser()", ex);
+      } else IO.printSQLException("addUser()", ex);
       return false;
   } }
 
@@ -720,7 +1100,7 @@ public final class Database {
     String USERNAME = username.toUpperCase();
 
     if (!USERS.contains(USERNAME)) {
-      printError("deleteUser()", "user '" + username + "' doesn't exist");
+      IO.printError("deleteUser()", "user '" + username + "' doesn't exist");
       return false;
     }
 
@@ -730,7 +1110,7 @@ public final class Database {
 
     // if current user is not DBO, they can't use this method
     if(!userIsDBO()) {
-      printError("deleteUser()", "only database owner can add new users");
+      IO.printError("deleteUser()", "only database owner can add new users");
       return false;
     }
 
@@ -751,7 +1131,7 @@ public final class Database {
 
       // if valid, continue, otherwise return false
       if (!isValid) {
-        printError("deleteUser()", "could not verify database owner's password");
+        IO.printError("deleteUser()", "could not verify database owner's password");
         return false;
       }
 
@@ -768,12 +1148,12 @@ public final class Database {
         "call SYSCS_UTIL.SYSCS_DROP_USER('" + USERNAME + "')");
 
       // if we've made it this far without throwing an error, success!
-      printMessage("deleteUser()", "user '" + username + "' successfully deleted");
+      IO.printMessage("deleteUser()", "user '" + username + "' successfully deleted");
       return true;
 
     // catch SQL exceptions
     } catch (SQLException ex) {
-      printSQLException("deleteUser()", ex);
+      IO.printSQLException("deleteUser()", ex);
       return false;
     }
   }
@@ -801,13 +1181,13 @@ public final class Database {
     // if either argument is null or empty, throw an error
     if (oldPassword == null || newPassword == null ||
           "".equals(oldPassword.trim()) || "".equals(newPassword.trim())) {
-      printError("changePassword()", "neither argument can be null, empty, or all whitespace");
+      IO.printError("changePassword()", "neither argument can be null, empty, or all whitespace");
       return false;
     }
 
     // if new password has leading or trailing whitespace, throw error (bit.ly/2Sj7BtE)
     if (!newPassword.trim().equals(newPassword)) {
-      printError("changePassword()", "password cannot have leading or trailing whitespace");
+      IO.printError("changePassword()", "password cannot have leading or trailing whitespace");
       return false;
     }
 
@@ -849,17 +1229,17 @@ public final class Database {
         ps_chpwd.execute();
 
         // inform the user that the password has been successfully changed
-        printMessage("changePassword()", "password successfully changed");
+        IO.printMessage("changePassword()", "password successfully changed");
         return true;
 
       } else {
-        printMessage("changePassword()", "invalid password; password not changed");
+        IO.printMessage("changePassword()", "invalid password; password not changed");
         return false;
       }
 
     // catch SQL errors
     } catch (SQLException ex) {
-      printSQLException("changePassword()", ex);
+      IO.printSQLException("changePassword()", ex);
       return false;
   } }
 
@@ -896,13 +1276,13 @@ public final class Database {
     // if any argument is null or empty, throw an error
     if (username == null || newPassword == null || dboPassword == null ||
           "".equals(username.trim()) || "".equals(newPassword.trim()) || "".equals(dboPassword.trim())) {
-      printError("resetPassword()", "no argument can be null, empty, or all whitespace");
+      IO.printError("resetPassword()", "no argument can be null, empty, or all whitespace");
       return false;
     }
 
     // if new password has leading or trailing whitespace, throw error (bit.ly/2Sj7BtE)
     if (!newPassword.trim().equals(newPassword)) {
-      printError("resetPassword()", "password cannot have leading or trailing whitespace");
+      IO.printError("resetPassword()", "password cannot have leading or trailing whitespace");
       return false;
     }
 
@@ -918,7 +1298,7 @@ public final class Database {
     String USERNAME = username.toUpperCase();
 
     if (!USERS.contains(USERNAME)) {
-      printError("resetPassword()", "user '" + username + "' doesn't exist");
+      IO.printError("resetPassword()", "user '" + username + "' doesn't exist");
       return false;
     }
 
@@ -928,7 +1308,7 @@ public final class Database {
 
     // if current user is not DBO, they can't use this method
     if(!userIsDBO()) {
-      printError("resetPassword()", "only database owner can reset user passwords");
+      IO.printError("resetPassword()", "only database owner can reset user passwords");
       return false;
     }
 
@@ -949,7 +1329,7 @@ public final class Database {
 
       // if valid, continue, otherwise return false
       if (!isValid) {
-        printError("resetPassword()", "could not verify database owner's password");
+        IO.printError("resetPassword()", "could not verify database owner's password");
         return false;
       }
 
@@ -973,12 +1353,12 @@ public final class Database {
       ps_chpwd.execute();
 
       // inform the user that the password has been successfully changed
-      printMessage("resetPassword()", "password successfully changed");
+      IO.printMessage("resetPassword()", "password successfully changed");
       return true;
 
     // catch SQL errors
     } catch (SQLException ex) {
-      printSQLException("resetPassword()", ex);
+      IO.printSQLException("resetPassword()", ex);
       return false;
     }
   }
@@ -1033,7 +1413,7 @@ public final class Database {
 
     // catch SQL errors -- return empty list if there was a problem
     } catch (SQLException ex) {
-      printSQLException("tables()", ex);
+      IO.printSQLException("tables()", ex);
       TABLES.clear(); // clear half-filled list
     }
 
@@ -1078,6 +1458,7 @@ public final class Database {
     for (List<String> row : table)
       System.out.println(row.stream()
         .map(e -> {
+          if (e == null) e = "";
           String temp = String.format("%-" + columnWidth + "." + columnWidth + "s", e);
           if (e.length() > columnWidth) {
             temp = temp.substring(0, columnWidth-3);
@@ -1113,7 +1494,7 @@ public final class Database {
 
     // if tableName is null, empty, or all whitespace, throw error
     if (tableName == null || "".equals(tableName.trim())) {
-      printError("table()", "tableName cannot be null, empty, or all whitespace");
+      IO.printError("table()", "tableName cannot be null, empty, or all whitespace");
       return null;
     }
 
@@ -1125,7 +1506,7 @@ public final class Database {
     // print an error and return
 
     if (!tables().contains(TABLE)) {
-      printError("printTable()", "table '" + tableName + "' cannot be found");
+      IO.printError("printTable()", "table '" + tableName + "' cannot be found");
       return retval;
     }
 
@@ -1145,7 +1526,7 @@ public final class Database {
       for (int cc = 1; cc <= numberOfColumns; ++cc)
         row.add(rsmd.getColumnName(cc));
 
-      while(resultSet.next()) {
+      while (resultSet.next()) {
 
         // increment the row count
         ++rowCount;
@@ -1165,10 +1546,12 @@ public final class Database {
 
     // catch SQL errors
     } catch (SQLException ex) {
-      printSQLException("printTable()", ex);
+      IO.printSQLException("printTable()", ex);
       retval.clear(); // clear the half-initialised list
       return retval;
   } }
+
+
 
   ///---------------------------------------------------------------------------
   ///
@@ -1195,7 +1578,7 @@ public final class Database {
 
     // catch SQL errors -- return empty if there was a problem
     } catch (SQLException ex) {
-      printSQLException("user()", ex);
+      IO.printSQLException("user()", ex);
       return Optional.empty();
   } }
 
@@ -1221,7 +1604,7 @@ public final class Database {
 
     // catch SQL errors -- return empty if there was a problem
     } catch (SQLException ex) {
-      printSQLException("owner()", ex);
+      IO.printSQLException("owner()", ex);
       return Optional.empty();
     }
   }
@@ -1242,40 +1625,10 @@ public final class Database {
     Optional<String> OPTUSER  =  user();
 
     if (!OPTOWNER.isPresent() || !OPTUSER.isPresent()) {
-      printError("userIsDBO()", "problem acquiring current user or database owner");
+      IO.printError("userIsDBO()", "problem acquiring current user or database owner");
       return false;
 
     } else return OPTOWNER.get().equals(OPTUSER.get());
-  }
-
-  ///---------------------------------------------------------------------------
-  ///
-  ///  PRIVATE MESSAGING METHODS
-  ///
-  ///---------------------------------------------------------------------------
-
-  // prints an error message to the standard error stream
-  private static void printError (String methodSignature, String message) {
-    System.err.printf("%n         ERROR | %s : %s%n%n", methodSignature, message);
-  }
-
-  // prints a warning message to the standard error stream
-  private static void printWarning (String methodSignature, String message) {
-    System.err.printf("%n       WARNING | %s : %s%n%n", methodSignature, message);
-  }
-
-  // prints a message to the standard error stream
-  private static void printMessage (String methodSignature, String message) {
-    System.err.printf("%n       MESSAGE | %s : %s%n%n", methodSignature, message);
-  }
-
-  // prints an SQLException message to the standard error stream (bit.ly/2zJV23d)
-  private static void printSQLException (String methodSignature, SQLException ex) {
-    while (ex != null) {
-      System.err.printf("%n  SQLException | %s : %s [SQL State: %s, Error Code: %d]",
-        methodSignature, ex.getMessage(), ex.getSQLState(), ex.getErrorCode());
-      ex = ex.getNextException();
-    } System.err.println();
   }
 
 }
