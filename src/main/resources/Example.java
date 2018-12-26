@@ -8,7 +8,7 @@
   //----------------------------------------------------------------------------
 
   // define database name
-  String dbn = "db69"
+  String dbn = "db81"
 
   // load the package
   import watson.*
@@ -164,13 +164,6 @@
   db.addContact(c0)
   db.printTable("usera.contacts", 15)
 
-
-
-
-
-/// add method to get lists of contacts based on filters
-
-
   //----------------------------------------------------------------------------
   //
   //  USER TABLE / DATA MANAGEMENT
@@ -194,10 +187,13 @@
   db.printTable("usera.groups", 15)
 
   // delete a group with deleteGroup (removes all members)
-//  db.deleteGroup("family")
+  db.deleteGroup("family")
+  db.printTable("usera.groups", 15)
 
   // rename a group
-//  db.renameGroup("work", "colleagues")  
+  db.renameGroup("work", "colleagues")  
+  db.printTable("usera.groups", 15)
+
 
 
 
@@ -206,6 +202,11 @@
 // USER MANAGEMENT: DONE
 
 // DATA MANAGEMENT:
+//  - make sure contacts can't be added to the same group multiple times
+//  - Javadoc header for Contact.java
+//  - input validation in Contact.java
+//  - Javadoc header for Database.java
+//  - clean up userOps code
 //  - ability to search and sort (asc/desc on fields) contacts
 
 // USER INTERFACE:
@@ -214,7 +215,8 @@
 
 
 
-
+// restrictions
+//   Contacts are set up to only have char or varchar fields (see set())
 
 
 

@@ -7,6 +7,10 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+  * Contact class for associated {@code CONTACT} table in database.
+  *
+  **/
 public final class Contact {
 
   //----------------------------------------------------------------------------
@@ -27,6 +31,7 @@ public final class Contact {
   //
   //----------------------------------------------------------------------------
 
+  /** Information associated with this {@link Contact} object. **/
   // "double brace" initialisation: http://bit.ly/2Agb7xX
   protected LinkedHashMap<String, Entry<String,String>> info =
         new LinkedHashMap<String, Entry<String,String>>(){{
@@ -37,19 +42,32 @@ public final class Contact {
 
   }};
 
-  // check if key exists
+  /**
+    * Returns {@code true} if the specified {@code key} is valid (if a
+    * {@link Contact} object allows a value associated with that {@code key}).
+    *
+    * <p>Returns false if the {@code key} is {@code null}, empty, or
+    * all-whitespace, or if the {@link Contact} doesn't contain the specified
+    * {@code key}. Otherwise, returns {@code true}.</p>
+    *
+    * @param key key to check for existence within this {@link Contact}'s {@code info}
+    *
+    * @return {@code true} if the specified {@code key} is valid (if a
+    * {@link Contact} object allows a value associated with that {@code key})
+    *
+    **/
   public boolean keyExists (String key) {
 
     // filter out null, empty, and all-whitespace keys
     if (key == null || "".equals(key.trim())) {
-      IO.printError("keyExists()", "null, empty, or all-whitespace keys not allowed");
+      IOUtils.printError("keyExists()", "null, empty, or all-whitespace keys not allowed");
       return false;
     }
 
     // filter out keys that don't exist above
     String KEY = key.toUpperCase();
     if (!info.containsKey(KEY)) {
-      IO.printError("keyExists()", "Contact doesn't contain key '" + key + "'");
+      IOUtils.printError("keyExists()", "Contact doesn't contain key '" + key + "'");
       return false;
     }
 
@@ -57,26 +75,64 @@ public final class Contact {
     return true;
   }
 
-  // get the value associated with the given key
+  /**
+    * Returns the value associated with the {@code key} in this {@link Contact}'s
+    * {@code info}, if the {@code key} exists.
+    *
+    * <p>If the {@code key} doesn't exist, an {@link Optional#empty empty Optional}
+    * is returned. Note that {@code key}s are case-insensitive.</p>
+    *
+    * @param key name of the value to get from this {@link Contact}'s {@code info}
+    *
+    * @return the value associated with the {@code key} in this {@link Contact}'s
+    * {@code info}, if the {@code key} exists
+    *
+    **/
   public Optional<String> get (String key) {
     if (!keyExists(key)) return Optional.empty();
     String KEY = key.toUpperCase();
     return Optional.of(info.get(KEY).getValue());
   }
 
-  // set value to null or empty to remove value
+  /**
+    * If the given {@code key} exists in this {@link Contact}'s {@code info},
+    * sets it to the given {@code value}.
+    *
+    * <p>If the {@code key} does not exist, this {@link Contact} object is
+    * returned as-is and this method throws no error. If the {@code value} is
+    * {@code null}, an empty {@link String}, or an all-whitespace {@code String},
+    * the value associated with the {@code key} in this {@link Contact}'s
+    * {@code info} will be set to {@code null}.</p>
+    *
+    * @param key variable to set (must be a variable listed in {@code info})
+    * @param value value to assign to the variable referenced by {@code key}
+    *
+    * @return this {@link Contact}, with {@code key} set to its new
+    * {@code value} (if both {@code key} and {@code value} are valid)
+    *
+    **/
   public Contact set (String key, String value) {
     if (!keyExists(key)) return this;
 
     String KEY = key.toUpperCase();
-    Entry old = info.get(KEY);
+    Entry<String,String> old = info.get(KEY);
 
-    if ("".equals(value)) value = null;
-    info.put(KEY, new SimpleEntry(old.getKey(), value));
+    if (value == null || "".equals(value.trim())) value = null;
+    info.put(KEY, new SimpleEntry<String, String>(old.getKey(), value));
     return this;
   }
 
-  // returns null if all fields are null
+  /**
+    * Returns this {@link Contact} formatted so that it can be inserted as a
+    * list of values into an SQL table.
+    *
+    * <p>If all fields of this {@link Contact} are {@code null}, this method
+    * returns a {@code null} {@link String}.</p>
+    *
+    * @return this {@link Contact} formatted so that it can be inserted as a
+    * list of values into an SQL table
+    *
+    **/
   @Override
   public String toString() {
 
@@ -92,7 +148,7 @@ public final class Contact {
 
     // if empty, return null
     if ("()".equals(varNames) && "('')".equals(varVals)) {
-      IO.printError("toString()", "all contact information is null");
+      IOUtils.printError("toString()", "all contact information is null");
       return null;
     }
 
