@@ -19,7 +19,7 @@ public class IOUtils {
     *
     **/
   protected static void printError (String methodSignature, String message) {
-    System.err.printf("%n         ERROR | %s : %s%n", methodSignature, message);
+    System.err.printf("         ERROR | %s : %s%n", methodSignature, message);
   }
 
   /**
@@ -30,7 +30,7 @@ public class IOUtils {
     *
     **/
   protected static void printWarning (String methodSignature, String message) {
-    System.err.printf("%n       WARNING | %s : %s%n", methodSignature, message);
+    System.err.printf("       WARNING | %s : %s%n", methodSignature, message);
   }
 
   /**
@@ -41,7 +41,7 @@ public class IOUtils {
     *
     **/
   protected static void printMessage (String methodSignature, String message) {
-    System.err.printf("%n       MESSAGE | %s : %s%n", methodSignature, message);
+    System.err.printf("       MESSAGE | %s : %s%n", methodSignature, message);
   }
 
   /**
@@ -50,11 +50,12 @@ public class IOUtils {
     * @param methodSignature signature of the calling method, for debugging
     * @param ex {@link SQLException} to print to the terminal
     *
+    * @see <a href="http://bit.ly/2zJV23d">Derby SimpleApp.java</a>
+    *
     **/
-  /// add "see also" link: http://bit.ly/2zJV23d
   protected static void printSQLException (String methodSignature, SQLException ex) {
     while (ex != null) {
-      System.err.printf("%n  SQLException | %s : %s [SQL State: %s, Error Code: %d]",
+      System.err.printf("  SQLException | %s : %s [SQL State: %s, Error Code: %d]",
         methodSignature, ex.getMessage(), ex.getSQLState(), ex.getErrorCode());
       ex = ex.getNextException();
     } System.err.println();

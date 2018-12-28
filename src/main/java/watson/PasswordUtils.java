@@ -12,11 +12,45 @@ import javax.crypto.spec.PBEKeySpec;
 /**
   * Utility class for password encryption and verification.
   *
-  * <p>This class uses the "PBKDF2WithHmacSHA512" algorithm for generating
-  * 512-bit cryptographic keys. This is a Password-Based-Key-Derivative Function
-  * (PBKDF) which is set to mix the hash at least 2<sup>16</sup> times. Salt for
-  * this hashing algorithm is generate using a {@link SecureRandom}, which is a
-  * cryptographically-secure random number generator.</p>
+  * <p>This class uses the
+  * <a href="http://bit.ly/2GJPdZk">PBKDF2WithHmacSHA512</a> algorithm for
+  * generating 512-bit cryptographic keys. This is a
+  * Password-Based-Key-Derivative Function (PBKDF) which is set to mix the hash
+  * at least 2<sup>16</sup> (65536) times. Salt for this hashing algorithm is
+  * generate using a {@link SecureRandom}, which is a cryptographically-secure
+  * random number generator.</p>
+  *
+  * <p>A blog post, inspired by writing this class, can be found on
+  * <a href="https://dev.to/awwsmm/how-to-encrypt-a-password-in-java-42dh">my
+  * Dev.To page</a>. It contains a thorough explanation of this code, while the
+  * text below only provides example usage.</p>
+  *
+  * <p>To generate a {@code salt} string, do:</p>
+  *
+  * <pre>{@code
+  * jshell> import watson.*
+  *
+  * jshell> String salt = PasswordUtils.generateSalt(512).get()
+  * salt ==> "1T1uB6kjrp9YEBTvROPa8n8VbOGE+WJk4ds5asPxzH76HUEu ... 18Ly52X02aAfgUhKHo4B9JXk="
+  * }</pre>
+  *
+  * <p>Then, hash the password and generate the key:</p>
+  *
+  * <pre>{@code
+  * jshell> String key = PasswordUtils.hashPassword("Of Salesmen!", salt).get()
+  * key ==> "AszLKBIMpxGdUKlcGryNUizi7yKhVGOqpyrxpT6UOU+XG6ie ... rZGgLP7wq/HhBmKPdqXG8eA=="
+  * }</pre>
+  *
+  * <p>(Try not to store the password as a {@link String} anywhere, if you can
+  * help it.) Then, you can tell if a user-entered password is correct:</p>
+  *
+  * <pre>{@code
+  * jshell> PasswordUtils.verifyPassword("Of Salesmen!", key, salt)
+  * $4 ==> true
+  *
+  * jshell> PasswordUtils.verifyPassword("By-Tor! And the Snow Dog!", key, salt)
+  * $5 ==> false
+  * }</pre>
   *
   **/
 public final class PasswordUtils {
@@ -47,7 +81,7 @@ public final class PasswordUtils {
     }
   }
 
-  // perform hash mixing X times (default: 2^16 times)
+  // perform hash mixing X times (default: 2^16 = 65536 times)
   private static final int ITERATIONS = 65536;
 
   // return a final cryptographic key of X bytes
@@ -59,22 +93,23 @@ public final class PasswordUtils {
   /**
     * Generates a random {@code byte[]} of the given {@code length} using
     * {@link SecureRandom#getInstanceStrong()} and returns that array as a
-    * base-64-encoded {@code String}, wrapped in an {@link Optional}.
+    * base-64-encoded {@link String}, wrapped in an {@link Optional}.
     *
-    * <p>Returns {@link Optional#empty} if {@code length} is {@code < 1}. A
-    * {@code length} of at least 32 is recommended, though the default in
-    * this package is 512.</p>
+    * <p>Returns {@link Optional#empty an empty Optional} if {@code length}
+    * is {@code < 1}. A {@code length} of at least 32 is recommended, though the
+    * default in this package is 512.</p>
     *
     * @param length length of the random {@code byte[]} to generate
     *
-    * @return a "salt" {@code String} to use as the second argument to
-    * {@link hashPassword(String, String)}, wrapped in an {@link Optional}
+    * @return a "salt" {@link String} to use as the second argument to
+    * {@link hashPassword(String, String) hashPassword()}, wrapped in an
+    * {@link Optional}
     *
     **/
   public static Optional<String> generateSalt (final int length) {
 
     if (length < 1) {
-      System.err.println("error in generateSalt: length must be > 0");
+      IOUtils.printError("generateSalt()", "length must be > 0");
       return Optional.empty();
     }
 
@@ -85,19 +120,20 @@ public final class PasswordUtils {
   }
 
   /**
-    * Encrypts the given password using the "PBKDF2WithHmacSHA512" algorithm,
-    * mixing the hash at least 2<sup>16</sup> times, generating a 512-bit key,
-    * which is returned as a base-64-encoded {@code String}.
+    * Hashes the given password using the
+    * <a href="http://bit.ly/2GJPdZk">PBKDF2WithHmacSHA512</a> algorithm,
+    * mixing at least 2<sup>16</sup> times, generating a 512-bit key,
+    * which is returned as a base-64-encoded {@link String}.
     *
-    * <p>Returns {@link Optional#empty()} if the algorithm "PBKDF2WithHmacSHA512"
-    * can't be found in this Java distribution or if the PBEKey otherwise
-    * cannot be created.</p>
+    * <p>Returns {@link Optional#empty an empty Optional} if the algorithm
+    * "PBKDF2WithHmacSHA512" can't be found in this Java distribution or if the
+    * PBEKey otherwise cannot be created.</p>
     *
-    * @param password password to encrypt
+    * @param password password to hash
     * @param salt extra random string to use in the hash mixing algorithm
     *
-    * @return the encryped password as an {@code Optional<String>}, or
-    * {@link Optional#empty()} if there was a problem
+    * @return the hashed password as an {@code Optional<String>}, or
+    * {@link Optional#empty an empty Optional} if there was a problem
     *
     **/
   public static Optional<String> hashPassword (String password, String salt) {
@@ -137,7 +173,7 @@ public final class PasswordUtils {
 
     // if exception encountered, return empty Optional
     } catch (NoSuchAlgorithmException | InvalidKeySpecException ex) {
-      System.err.println("Exception encountered in hashPassword()");
+      IOUtils.printError("hashPassword()", "exception encountered... hashing aborted");
       return Optional.empty();
 
     } finally {
@@ -150,14 +186,14 @@ public final class PasswordUtils {
   }
 
   /**
-    * Given the {@code password} and the {@code salt} used to encrypt that
+    * Given the {@code password} and the {@code salt} used to hash that
     * password, verifies that the cryptographic key generated matches the given
     * {@code key}.
     *
     * <p>Returns {@code false} if the {@code password} and {@code salt} do not
     * generate the {@code key}, or if {@link hashPassword(String, String)}
     * with {@code password} and {@code salt} as arguments returns
-    * {@link Optional#empty()}.</p>
+    * {@link Optional#empty an empty Optional}.</p>
     *
     * @param password password to verify
     * @param key cryptographic key assumed to have been generated from the given
@@ -165,7 +201,7 @@ public final class PasswordUtils {
     * @param salt salt used to generate {@code key} (along with original password)
     *
     * @return {@code true} if the {@code password} and {@code salt} can be used
-    * to reconstruct the {@code key}, i.e. if the {@code password} is correct.
+    * to reconstruct the {@code key}, i.e. if the {@code password} is correct
     *
     **/
   public static boolean verifyPassword (String password, String key, String salt) {

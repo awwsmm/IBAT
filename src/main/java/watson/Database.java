@@ -14,14 +14,426 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 
-import java.util.function.BooleanSupplier;
-
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import java.util.stream.Collectors;
 
-
+/**
+  * Class for creating, loading, and manipulating
+  * <a href="https://db.apache.org/derby/">Apache Derby</a> databases.
+  *
+  * <p>This package provides methods for creating and loading Derby databases,
+  * tailored to the specifications of the end-of-term project for
+  * <a href="https://www.ibat.ie/">IBAT College Dublin</a>'s
+  * <a href="https://www.ibat.ie/courses/advanced-java-programming-course.html">Advanced
+  * Diploma in Computer Programming (Advanced Java)</a> class, for the Autumn
+  * 2018 term.</p>
+  *
+  * <h2>Creating a Database</h2>
+  *
+  * <p>Users can create or load databases with the {@link connect connect()}
+  * method (and disconnect from them with the {@link disconnect disconnect()}
+  * method):</p>
+  *
+  * <pre>{@code
+  * jshell> import watson.*
+  *
+  * jshell> String dbname = "myDatabase"
+  * dbname ==> "myDatabase"
+  *
+  * jshell> Optional<Database> optdb = Database.connect(dbname, "bootpass", "owner", "ownerpass")
+  *        MESSAGE | connect() : database successfully initialised
+  * optdb ==> Optional[watson.Database@69f63d95]
+  *
+  * jshell> Database db = optdb.get()
+  * db ==> watson.Database@69f63d95
+  * }</pre>
+  *
+  * <p>In the call to {@link connect connect()}, above, {@code dbname} is the
+  * name of the database, {@code "bootpass"} is the password to boot the
+  * database, and {@code "owner"} and {@code "ownerpass"} are the username and
+  * password of the user logging into the database (in this case, the owner, as
+  * this database is only just being created. The database name and boot
+  * password are always required to open the database, though the username and
+  * user password may change. Note that the owner of the database cannot be
+  * altered or transferred, so in the above case, "owner" will always be the
+  * owner of this database. Database owners (or DBOs) have certain permissions
+  * that regular users don't have, but they cannot interact with the database
+  * like normal users in that they do not have lists of contacts or groups.</p>
+  *
+  * <p>You can manually check if the current user is the database owner by
+  * calling the {@link owner owner()} and {@link user user()} methods, or you
+  * can use the convenience method {@link userIsDBO userIsDBO()}:</p>
+  *
+  * <pre>{@code
+  * jshell> db.owner(); db.user()
+  * $5 ==> Optional[OWNER]
+  * $6 ==> Optional[OWNER]
+  *
+  * jshell> db.userIsDBO()
+  * $7 ==> true
+  * }</pre>
+  *
+  * <p>The DBO can get a list of all users with the {@link users users()}
+  * method, and any user can get a list of all tables available to them by
+  * calling the {@link tables tables()} method. As the DBO can edit any user
+  * and any table, they have access to all of this information:</p>
+  *
+  * <pre>{@code
+  * jshell> db.users(); db.tables()
+  * $8 ==> Optional[[OWNER]]
+  * $9 ==> [OWNER.SECURE]
+  * }</pre>
+  *
+  * <p>The DBO only has a {@code SECURE} table, which holds their hashed
+  * password and the salt used during the hashing process (see
+  * {@link PasswordUtils}). Every other non-DBO user also has
+  * a {@code CONTACTS} table, which holds a list of their contacts, and a
+  * {@code GROUPS} table, which holds all of the relationships between the
+  * user's contacts and their groups of contacts. {@code SECURE} tables are, by
+  * default, hidden from non-DBO users. Each non-DBO user can only see their own
+  * {@code CONTACTS} and {@code GROUPS} tables.</p>
+  *
+  * <p>Any user (including the DBO) can change their password with the
+  * {@link changePassword changePassword()} method:</p>
+  *
+  * <pre>{@code
+  * jshell> db.changePassword("ownerpass", "newpass")
+  *       MESSAGE | changePassword() : password successfully changed
+  * $10 ==> true
+  * }</pre>
+  *
+  * <p>The user must enter their old password in order to change their password,
+  * as a measure of added security.</p>
+  *
+  * <h2>Managing Database Users</h2>
+  *
+  * <p>The DBO can add users to the database by providing a username and a
+  * password, and by verifying their own password:</p>
+  *
+  * <pre>{@code
+  * jshell> db.addUser("usera", "userapass", "newpass")
+  *        MESSAGE | addUser() : user 'usera' successfully added
+  * $11 ==> true
+  *
+  * jshell> db.addUser("userb", "userbpass", "newpass")
+  *        MESSAGE | addUser() : user 'userb' successfully added
+  * $12 ==> true
+  *
+  * jshell> db.addUser("userc", "usercpass", "newpass")
+  *        MESSAGE | addUser() : user 'userc' successfully added
+  * $13 ==> true
+  *
+  * jshell> db.users(); db.tables()
+  * $14 ==> Optional[[OWNER, USERA, USERB, USERC]]
+  * $15 ==> [OWNER.SECURE, USERA.CONTACTS, USERA.GROUPS, USERA.SECURE, USERB.CONTACTS, USERB.GROUPS, USERB.SECURE, USERC.CONTACTS, USERC.GROUPS, USERC.SECURE]
+  * }</pre>
+  *
+  * <p>The DBO can delete a user with the {@link deleteUser deleteUser()}
+  * method (again, the DBO must re-enter their password as a security
+  * measure):</p>
+  *
+  * <pre>{@code
+  * jshell> db.deleteUser("userb", "newpass")
+  *        MESSAGE | deleteUser() : user 'userb' successfully deleted
+  * $16 ==> true
+  *
+  * jshell> db.users(); db.tables()
+  * $17 ==> Optional[[OWNER, USERA, USERC]]
+  * $18 ==> [OWNER.SECURE, USERA.CONTACTS, USERA.GROUPS, USERA.SECURE, USERC.CONTACTS, USERC.GROUPS, USERC.SECURE]
+  * }</pre>
+  *
+  * <p>Note that usernames are case-insensitive, but passwords (obviously) are
+  * case-sensitive. Passwords cannot be {@code null}, empty, or have any leading
+  * or trailing whitespace characters.</p>
+  *
+  * <p>The DBO can reset a user's password (if they forgot it, for instance) by
+  * calling the {@link resetPassword resetPassword()} method:</p>
+  *
+  * <pre>{@code
+  * jshell> db.resetPassword("usera", "password1", "newpass")
+  *        MESSAGE | resetPassword() : password successfully changed
+  * $19 ==> true
+  * }</pre>
+  *
+  * <h2>User Permissions</h2>
+  *
+  * <p>To disconnect from the database, close the {@code jshell} or call the
+  * {@link disconnect disconnect()} method. You can then log back into the
+  * database as a different user:</p>
+  *
+  * <pre>{@code
+  * jshell> db.disconnect()
+  *
+  * jshell> optdb = Database.connect(dbname, "bootpass", "usera", "password1")
+  *        MESSAGE | connect() : database successfully initialised
+  * optdb ==> Optional[watson.Database@3e681bc]
+  *
+  * jshell> db = optdb.get()
+  * db ==> watson.Database@3e681bc
+  * }</pre>
+  *
+  * <p>Non-DBO users can see their own username, the username of the DBO, and
+  * all of the tables available to them. They cannot see other users' tables,
+  * their own {@code SECURE} table, or the list of usernames:</p>
+  *
+  * <pre>{@code
+  * jshell> db.user(); db.owner(); db.tables(); db.users()
+  * $23 ==> Optional[USERA]
+  * $24 ==> Optional[OWNER]
+  * $25 ==> [USERA.CONTACTS, USERA.GROUPS]
+  *          ERROR | users() : only database owner can view list of users
+  * $26 ==> Optional.empty
+  * }</pre>
+  *
+  * <p>A table can be printed to the terminal with
+  * {@link printTable printTable()}:</p>
+  *
+  * <pre>{@code
+  * jshell> db.printTable("usera.contacts", 15)
+  *
+  *     | ID              | FIRSTNAME       | SURNAME         | PHONE           |
+  *     | --------------- | --------------- | --------------- | --------------- |
+  * }</pre>
+  *
+  * <p>(The above table is empty, so it's not very exciting at the moment.) The
+  * second argument to {@link printTable printTable()} is the column width.</p>
+  *
+  * <h2>Managing Contacts</h2>
+  *
+  * <p>To add a contact to the {@code CONTACTS} table, create a {@link Contact}
+  * object, set some of its fields, and add it to the table with
+  * {@link addContact addContact()}:</p>
+  *
+  * <pre>{@code
+  * jshell> Contact c = new Contact()
+  * c ==> 
+  *
+  * jshell> c.set("phone", "+3531234567890").set("surname", "watson")
+  * $29 ==> (SURNAME, PHONE) values ('watson', '+3531234567890')
+  *
+  * jshell> db.addContact(c)
+  *        MESSAGE | addContact() : successfully added contact
+  * $30 ==> true
+  *
+  * jshell> db.printTable("usera.contacts", 15)
+  *
+  *     | ID              | FIRSTNAME       | SURNAME         | PHONE           |
+  *     | --------------- | --------------- | --------------- | --------------- |
+  *     | 1               |                 | watson          | +3531234567890  |
+  * }</pre>
+  *
+  * <p>In addition to simply printing tables to the terminal with
+  * {@link printTable printTable()}, the user can get a table as a
+  * {@code List<List<String>>} using {@link table table()}. The first row
+  * returned always contains the column headers / labels:</p>
+  *
+  * <pre>{@code
+  * jshell> db.table("usera.contacts")
+  * $31 ==> [[ID, FIRSTNAME, SURNAME, PHONE], [1, null, watson, +3531234567890]]
+  * }</pre>
+  *
+  * <p>Setting a field of a {@link Contact} object to {@code null}, an empty
+  * {@link String}, or an all-whitespace {@link String} will set the value of
+  * that field to {@code null} within the database. Setting a field of a
+  * {@link Contact} object which has already been set will overwrite that
+  * field:</p>
+  *
+  * <pre>{@code
+  * jshell> c.set("phone", null).set("firstname", "michael"); db.addContact(c)
+  * $32 ==> (FIRSTNAME, SURNAME) values ('michael', 'watson')
+  *        MESSAGE | addContact() : successfully added contact
+  * $33 ==> true
+  *
+  * jshell> c.set("phone", "+16109991234").set("firstname", "jessica"); db.addContact(c)
+  * $34 ==> (FIRSTNAME, SURNAME, PHONE) values ('jessica', 'watson', '+16109991234')
+  *        MESSAGE | addContact() : successfully added contact
+  * $35 ==> true
+  *
+  * jshell> c.set("phone", "+15850001212").set("firstname", "dave").set("surname", "   "); db.addContact(c)
+  * $36 ==> (FIRSTNAME, PHONE) values ('dave', '+15850001212')
+  *        MESSAGE | addContact() : successfully added contact
+  * $37 ==> true
+  *
+  * jshell> c.set("phone", null).set("firstname", "bob").set("surname", "jones"); db.addContact(c)
+  * $38 ==> (FIRSTNAME, SURNAME) values ('bob', 'jones')
+  *        MESSAGE | addContact() : successfully added contact
+  * $39 ==> true
+  *
+  * jshell> c.set("firstname", "steve").set("surname", "jenkins"); db.addContact(c)
+  * $40 ==> (FIRSTNAME, SURNAME) values ('steve', 'jenkins')
+  *        MESSAGE | addContact() : successfully added contact
+  * $41 ==> true
+  *
+  * jshell> c.set("surname", "smith"); db.addContact(c)
+  * $42 ==> (FIRSTNAME, SURNAME) values ('steve', 'smith')
+  *        MESSAGE | addContact() : successfully added contact
+  * $43 ==> true
+  *
+  * jshell> db.printTable("usera.contacts", 15)
+  *
+  *     | ID              | FIRSTNAME       | SURNAME         | PHONE           |
+  *     | --------------- | --------------- | --------------- | --------------- |
+  *     | 1               |                 | watson          | +3531234567890  |
+  *     | 2               | michael         | watson          |                 |
+  *     | 3               | jessica         | watson          | +16109991234    |
+  *     | 4               | dave            |                 | +15850001212    |
+  *     | 5               | bob             | jones           |                 |
+  *     | 6               | steve           | jenkins         |                 |
+  *     | 7               | steve           | smith           |                 |
+  * }</pre>
+  *
+  * <p>Contacts are given a unique, immutable ID number when they're created, and
+  * they can be referenced by this ID number. To update a particular contact,
+  * edit the {@link Contact} object and use the
+  * {@link updateContact updateContact()} method:</p>
+  *
+  * <pre>{@code
+  * jshell> c.set("phone", "+16108440000").set("firstname", "andrew").set("surname", "watson")
+  * $45 ==> (FIRSTNAME, SURNAME, PHONE) values ('andrew', 'watson', '+16108440000')
+  *
+  * jshell> db.updateContact(1, c)
+  *        MESSAGE | updateContact() : contact successfully updated
+  * $46 ==> true
+  *
+  * jshell> c.set("phone", "+44567992847").set("surname", "jenkins")
+  * $47 ==> (FIRSTNAME, SURNAME, PHONE) values ('andrew', 'jenkins', '+44567992847')
+  *
+  * jshell> db.updateContact(6, c)
+  *        MESSAGE | updateContact() : contact successfully updated
+  * $48 ==> true
+  *
+  * jshell> db.printTable("usera.contacts", 15)
+  *
+  *     | ID              | FIRSTNAME       | SURNAME         | PHONE           |
+  *     | --------------- | --------------- | --------------- | --------------- |
+  *     | 1               | andrew          | watson          | +16108440000    |
+  *     | 2               | michael         | watson          |                 |
+  *     | 3               | jessica         | watson          | +16109991234    |
+  *     | 4               | dave            |                 | +15850001212    |
+  *     | 5               | bob             | jones           |                 |
+  *     | 6               | andrew          | jenkins         | +44567992847    |
+  *     | 7               | steve           | smith           |                 |
+  * }</pre>
+  *
+  * <p>One or more contacts can be deleted at a time with the
+  * {@link deleteContacts deleteContacts()} method. New contacts continue the
+  * ID numbering sequence, so no ID is ever used twice:</p>
+  *
+  * <pre>{@code
+  * jshell> db.deleteContacts(2, 7)
+  *        MESSAGE | deleteContacts() : contacts successfully deleted
+  * $50 ==> true
+  *
+  * jshell> c.set("phone", "+44578390838").set("firstname", "mark").set("surname", "twain")
+  * $51 ==> (FIRSTNAME, SURNAME, PHONE) values ('mark', 'twain', '+44578390838')
+  *
+  * jshell> db.addContact(c)
+  *        MESSAGE | addContact() : successfully added contact
+  * $52 ==> true
+  *
+  * jshell> db.printTable("usera.contacts", 15)
+  *
+  *     | ID              | FIRSTNAME       | SURNAME         | PHONE           |
+  *     | --------------- | --------------- | --------------- | --------------- |
+  *     | 1               | andrew          | watson          | +16108440000    |
+  *     | 3               | jessica         | watson          | +16109991234    |
+  *     | 4               | dave            |                 | +15850001212    |
+  *     | 5               | bob             | jones           |                 |
+  *     | 6               | andrew          | jenkins         | +44567992847    |
+  *     | 8               | mark            | twain           | +44578390838    |
+  * }</pre>
+  *
+  * <p>All user input is sanitised and validated to prevent SQL injection
+  * attacks and ensure valid data:</p>
+  *
+  * <pre>{@code
+  * jshell> c.set("phone", "wrong").set("firstname", "; drop tables")
+  *          ERROR | set() : phone numbers can only contain digits and '+' signs
+  *          ERROR | set() : name fields can only contain letters, spaces, dashes (-) and apostrophes (')
+  * $54 ==> (FIRSTNAME, SURNAME, PHONE) values ('mark', 'twain', '+44578390838')
+  * }</pre>
+  *
+  * <h2>Contact Group Management</h2>
+  *
+  * <p>Contacts can be collected into named groups (group names are
+  * case-insensitive):</p>
+  *
+  * <pre>{@code
+  * jshell> db.addToGroup("family", 1, 3, 4)
+  *        MESSAGE | addToGroup() : successfully added to group
+  * $55 ==> true
+  * }</pre>
+  *
+  * <p>Groups must contain at least one contact. When the last contact in a
+  * group is removed, that group no longer exists:</p>
+  *
+  * <pre>{@code
+  * jshell> db.addToGroup("work")
+  *          ERROR | addToGroup() : no contact IDs given
+  * $56 ==> false
+  *
+  * jshell> db.addToGroup("work", 6, 7, 8)
+  *        MESSAGE | addToGroup() : successfully added to group
+  * $57 ==> true
+  * }</pre>
+  *
+  * <p>You can see which contacts are in which group(s) by calling
+  * {@link printTable printTable()} on the {@code GROUPS} table:</p>
+  *
+  * <pre>{@code
+  * jshell> db.printTable("usera.groups", 15)
+  *
+  *     | ID              | NAME            | CONTACTID       |
+  *     | --------------- | --------------- | --------------- |
+  *     | 1               | FAMILY          | 1               |
+  *     | 2               | FAMILY          | 3               |
+  *     | 3               | FAMILY          | 4               |
+  *     | 4               | WORK            | 6               |
+  *     | 5               | WORK            | 7               |
+  *     | 6               | WORK            | 8               |
+  * }</pre>
+  *
+  * <p>One or more contacts can be removed from a particular group by calling
+  * {@link removeFromGroup removeFromGroup()}. Every contact in a group can be
+  * removed from that group by calling {@link deleteGroup deleteGroup()}:</p>
+  *
+  * <pre>{@code
+  * jshell> db.removeFromGroup("work", 7)
+  *        MESSAGE | removeFromGroup() : successfully removed from group
+  * $59 ==> true
+  *
+  * jshell> db.deleteGroup("family")
+  *        MESSAGE | deleteGroup() : successfully deleted group
+  * $60 ==> true
+  *
+  * jshell> db.printTable("usera.groups", 15)
+  *
+  *     | ID              | NAME            | CONTACTID       |
+  *     | --------------- | --------------- | --------------- |
+  *     | 4               | WORK            | 6               |
+  *     | 6               | WORK            | 8               |
+  * }</pre>
+  *
+  * <p>Groups can be renamed with {@link renameGroup renameGroup()}:</p>
+  *
+  * <pre>{@code
+  * jshell> db.renameGroup("work", "colleagues")
+  *        MESSAGE | renameGroup() : successfully renamed group
+  * $62 ==> true
+  * }</pre>
+  *
+  * <p>Safeguards are in place to ensure that a particular contact cannot be
+  * added to the same group more than once:</p>
+  *
+  * <pre>{@code
+  * jshell> db.addToGroup("colleagues", 6)
+  *        WARNING | addToGroup() : user is already associated with group
+  * $63 ==> false
+  * }</pre>
+  *
+  **/
 public final class Database {
 
   //----------------------------------------------------------------------------
@@ -141,6 +553,7 @@ public final class Database {
 
     // reset all variables
     database   = null;
+    derbyName  = null;
     newDB      = false;
     resultSet  = null;
     rsmd       = null;
@@ -646,17 +1059,37 @@ public final class Database {
       for (int ID : IDs) {
         String query = "select * from " + USER + ".CONTACTS where id = " + ID;
         any = (any || contactOpsContactsAffected(opName, query));
-      } if (!any) return false;
+      }
+
+      if (!any) {
+        IOUtils.printWarning(opName, "no users added to group");
+        return false;
+      }
 
       // move groupName to all-caps
       String GROUPNAME = groupName.toUpperCase();
 
+      any = false;
       for (int ID : IDs) {
+
+        // first, check if this user is already associated with this group
+        resultSet = this.statement.executeQuery("select * from " + USER +
+          ".GROUPS where name = '" + GROUPNAME + "' and contactid = " + ID);
+
+        if (resultSet.next()) {
+          IOUtils.printWarning(opName, "user is already associated with group");
+          continue;
+        } any = true;
+
+        // if not, add this user to the group
         this.statement.execute("insert into " + USER + ".GROUPS(name, contactid) values ('" +
           GROUPNAME + "', " + ID + ")");
+      }
 
-      IOUtils.printMessage(opName, "successfully added to groups");
-      return true;
+      if (any) {
+        IOUtils.printMessage(opName, "successfully added to group");
+        return true;
+      } else return false;
 
     // catch SQL exceptions
     } catch (SQLException ex) {
@@ -851,10 +1284,10 @@ public final class Database {
   }
 
   // returns true only if all group names are valid
-  private boolean contactOpsValidateGroups (String opName, String... groups) {
+  private boolean contactOpsValidateGroups (String opName, String... args) {
 
-    for (String group : groups)
-      if (group == null || "".equals(group.trim())) {
+    for (String arg : args)
+      if (isNullOrWhitespace(arg)) {
         IOUtils.printError(opName, "group names cannot be null, empty, or all whitespace");
         return false;
       }
@@ -865,10 +1298,10 @@ public final class Database {
     Pattern p = Pattern.compile("[^a-zA-Z0-9_]");
     Matcher m;
 
-    for (String group : groups) {
-      m = p.matcher(group);
+    for (String arg : args) {
+      m = p.matcher(arg);
       if (m.find()) {
-        IOUtils.printError(opName, "group names can only contain ASCII alphanumeric characters and underscores");
+        IOUtils.printError(opName, "group names can only contain letters, numbers, and underscores");
         return false;
     } }
 
@@ -901,6 +1334,10 @@ public final class Database {
       IOUtils.printWarning(opName, "no contacts affected");
       return false;
     } return true;
+  }
+
+  private boolean isNullOrWhitespace (String s) {
+    return (s == null || "".equals(s.trim()));
   }
 
   ///---------------------------------------------------------------------------
@@ -980,8 +1417,7 @@ public final class Database {
     //  validate username and password
     //--------------------------------------------------------------------------
 
-    if (username == null || password == null ||
-          "".equals(username.trim()) || "".equals(password.trim())) {
+    if (isNullOrWhitespace(username) || isNullOrWhitespace(password)) {
       IOUtils.printError("addUser()", "neither username nor password can be null, empty, or all whitespace");
       return false;
     }
@@ -999,11 +1435,11 @@ public final class Database {
     Matcher m = p.matcher(username);
 
     if (m.find()) {
-      IOUtils.printError("addUser()", "usernames can only contain ASCII alphanumeric characters and underscores");
+      IOUtils.printError("addUser()", "usernames can only contain letters, numbers, and underscores");
       return false;
     }
 
-/// add restrictions on usernames and passwords (> 8 chars, etc?)
+    /// add restrictions on usernames and passwords (> 8 chars, etc?)
 
     //--------------------------------------------------------------------------
     //  get all prerequisite information; if there are any problems, fail fast
@@ -1278,8 +1714,7 @@ public final class Database {
   public boolean changePassword (String oldPassword, String newPassword) {
 
     // if either argument is null or empty, throw an error
-    if (oldPassword == null || newPassword == null ||
-          "".equals(oldPassword.trim()) || "".equals(newPassword.trim())) {
+    if (isNullOrWhitespace(oldPassword) || isNullOrWhitespace(newPassword)) {
       IOUtils.printError("changePassword()", "neither argument can be null, empty, or all whitespace");
       return false;
     }
@@ -1373,8 +1808,7 @@ public final class Database {
   public boolean resetPassword (String username, String newPassword, String dboPassword) {
 
     // if any argument is null or empty, throw an error
-    if (username == null || newPassword == null || dboPassword == null ||
-          "".equals(username.trim()) || "".equals(newPassword.trim()) || "".equals(dboPassword.trim())) {
+    if (isNullOrWhitespace(username) || isNullOrWhitespace(newPassword)) {
       IOUtils.printError("resetPassword()", "no argument can be null, empty, or all whitespace");
       return false;
     }

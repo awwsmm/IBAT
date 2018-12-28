@@ -8,7 +8,7 @@
   //----------------------------------------------------------------------------
 
   // define database name
-  String dbn = "db81"
+  String dbn = "db86"
 
   // load the package
   import watson.*
@@ -125,6 +125,16 @@
   //
   //----------------------------------------------------------------------------
 
+
+
+
+
+
+
+
+
+
+
   // create a new contact
   Contact c0 = new Contact()
 
@@ -135,18 +145,18 @@
   db.addContact(c0)
 
   // edit c0 and add more contacts to database
-  c0.set("phone", null).set("firstname", "michael"); db.addContact(c0)
-  c0.set("phone", "+16109991234").set("firstname", "jessica"); db.addContact(c0)
-  c0.set("phone", "+15850001212").set("firstname", "dave"); db.addContact(c0)
-  c0.set("phone", null).set("firstname", "bob").set("surname", "jones"); db.addContact(c0)
-  c0.set("firstname", "steve").set("surname", "jenkins"); db.addContact(c0)
-  c0.set("surname", "smith"); db.addContact(c0)
+  c.set("phone", null).set("firstname", "michael"); db.addContact(c)
+  c.set("phone", "+16109991234").set("firstname", "jessica"); db.addContact(c)
+  c.set("phone", "+15850001212").set("firstname", "dave"); db.addContact(c)
+  c.set("phone", null).set("firstname", "bob").set("surname", "jones"); db.addContact(c)
+  c.set("firstname", "steve").set("surname", "jenkins"); db.addContact(c)
+  c.set("surname", "smith"); db.addContact(c)
 
   // print table to see new contact
   db.printTable("usera.contacts", 15)
 
   // update the n-th row by passing a new Contact object -- every field is overwritten
-  c0.set("phone", "+16108441560").set("firstname", "andrew").set("surname", "watson")
+  c.set("phone", "+16108440000").set("firstname", "andrew").set("surname", "watson")
   db.updateContact(1, c0)
   c0.set("phone", "+44567992847").set("surname", "jenkins")
   db.updateContact(6, c0)
@@ -157,12 +167,15 @@
   db.updateContact(77, c0)
 
   // delete one or more contacts with deleteContacts()
-  db.deleteContacts(2, 5)
+  db.deleteContacts(2, 7)
 
   // id numbering continues with new contacts added
   c0.set("phone", "+44578390838").set("firstname", "mark").set("surname", "twain")
   db.addContact(c0)
   db.printTable("usera.contacts", 15)
+
+  // names and phone numbers are validated to ensure they only contain particular characters
+  c0.set("phone", "wrong").set("firstname", "; drop tables")
 
   //----------------------------------------------------------------------------
   //
@@ -194,20 +207,20 @@
   db.renameGroup("work", "colleagues")  
   db.printTable("usera.groups", 15)
 
-
-
+  // users cannot be added twice to the same group
+  db.addToGroup("colleagues", 6)
 
 
 
 // USER MANAGEMENT: DONE
 
 // DATA MANAGEMENT:
-//  - make sure contacts can't be added to the same group multiple times
-//  - Javadoc header for Contact.java
-//  - input validation in Contact.java
-//  - Javadoc header for Database.java
+//  - add README.md
 //  - clean up userOps code
 //  - ability to search and sort (asc/desc on fields) contacts
+//    - do this within the user interface:
+//      - get the table with table("USERNAME.CONTACTS")
+//      - sort / search that List<List<String>>
 
 // USER INTERFACE:
 //  - all of it
@@ -215,13 +228,55 @@
 
 
 
-// restrictions
-//   Contacts are set up to only have char or varchar fields (see set())
-
-
-
-
-
+// Considerations:
+//
+//   When set up to do so, Derby can require a valid username and password to allow
+//   a user to sign in:
+//
+//     User authorization / SQLauthorization
+//       [http://bit.ly/2GISMit]
+//       Passwords hashed using SHA-256 [http://bit.ly/2GKPhIj]
+//
+//     Database encryption:
+//       DES [http://bit.ly/2GWs46n] [http://bit.ly/2GIlOi9]
+//
+//     Hashed password and salt stored in user database to validate user password
+//     when performing sensitive operations (changing password, etc.). Salt generated
+//     using SecureRandom, a cryptographically-secure RNG.
+//
+//       Derby has methods to reset and modify the user password, but not simply to
+//       verify it. Requiring the user to re-enter their password before changing it
+//       ensures that someone else can't perform an over-the-shoulder attack and change
+//       the user's password while they're logged in, but away from their machine.
+//
+//   Everything accomplished in the UI should be accomplishable on the command line,
+//   as well. Command line functionality should be a superset of UI functionality.
+//
+//   Database.java code is a bit repetitive and could use some cleaning up
+//
+//   Contacts are set up to only have char or varchar fields (see set()) at the moment
+//     would have to do some slight retooling of Contact.java to extend this
+//
+//   Phone numbers can only contain digits and the '+' character. If it appears in the
+//   number, '+' must be the first character and can only appear once. Formatting should
+//   not be (and is not) part of the information in the database.
+//
+//   Only ASCII alphanumeric characters and underscores accepted in usernames, contact
+//     info fields, etc., to reduce likelihood of SQL injection attacks. Could expand
+//     this character set a bit with more work.
+//
+//   Limited restrictions on user passwords:
+//     cannot be null, empty, or all-whitespace
+//     cannot start or end with any whitespace characters
+//     ...could implement additional checks in addUser(), changePassword(), resetPassword()
+//
+//   Thread safety not considered
+//
+//   Logging
+//     should use Log4j, SLF4J, or Apache Commons Logging instead of printing to screen
+//
+//   Testing
+//     no tests written, but should use JUnit for unit testing
 
 
 

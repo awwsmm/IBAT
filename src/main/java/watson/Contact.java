@@ -1,14 +1,91 @@
 package watson;
 
-import java.util.LinkedHashMap;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.LinkedHashMap;
 import java.util.Map.Entry;
-
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
-  * Contact class for associated {@code CONTACT} table in database.
+  * Contact class for associated {@code CONTACTS} table in database.
+  *
+  * <p>A {@link Contact} object contains information about a given contact.
+  * Contacts must be constructed using the {@link Contact}s class, and can be
+  * added to the database with
+  * {@link Database#addContact Database.addContact()}.</p>
+  *
+  * <p>A {@link Contact} object can be created with:</p>
+  *
+  * <pre>{@code
+  * jshell> import watson.*
+  *
+  * jshell> Contact c = new Contact()
+  * c ==> 
+  * }</pre>
+  *
+  * <p>{@link Contact}s only allow particular, predefined fields. The user can
+  * see what fields are available by calling the {@link fields fields()}
+  * method, which returns a {@link Set}:</p>
+  *
+  * <pre>{@code
+  * jshell> c.fields()
+  * $3 ==> [SURNAME=varchar(40), FIRSTNAME=varchar(40), PHONE=varchar(16)]
+  * }</pre>
+  *
+  * <p>In the {@link Set} above, each element is a {@link SimpleEntry SimpleEntry}
+  * containing two {@link String}s (or, a "key" and a "value"). The key of each
+  * element is the SQL identifier for that particular piece of contact
+  * information. The value of each element is the SQL description of that field.
+  * As this is a {@link Set}, these key-value pairs may not always be returned
+  * in the same order. To set a particular field, use the
+  * {@link set set()} function:</p>
+  *
+  * <pre>{@code
+  * jshell> c.set("SURNAME", "O'Neill")
+  * $4 ==> (SURNAME) values ('O''Neill')
+  * }</pre>
+  *
+  * <p>Field assignment can be chained, and multiple fields can be set at
+  * once (the {@link Contact} object itself is the return value):</p>
+  *
+  * <pre>{@code
+  * jshell> c.set("firstname", "Colin").set("Phone", "+353445671234")
+  * $5 ==> (FIRSTNAME, SURNAME, PHONE) values ('Colin', 'O''Neill', '+353445671234')
+  * }</pre>
+  *
+  * <p>Note that the SQL identifiers ({@code "Phone"}, {@code "firstname"},
+  * etc.) are case-insensitive, and that the apostrophe in "O'Neill" has been
+  * escaped (by doubling). Field validation and sanitisation is performed in the
+  * {@link set set()} method, which is why fields must be hardcoded and cannot
+  * be added by the user. Attempting to set an invalid value to a particular
+  * field results in an error (and the unchanged {@link Contact} object is
+  * returned):</p>
+  *
+  * <pre>{@code
+  * jshell> c.set("phone", "this is not a phone number")
+  *          ERROR | set() : phone numbers can only contain digits and '+' signs
+  * $6 ==> (FIRSTNAME, SURNAME, PHONE) values ('Colin', 'O''Neill', '+353445671234')
+  * }</pre>
+  *
+  * <p>...as does attempting to set a value to a nonexistent field:</p>
+  *
+  * <pre>{@code
+  * jshell> c.set("email", "oneillc@fast.net")
+  *          ERROR | keyExists() : Contact doesn't contain key 'email'
+  * $7 ==> (FIRSTNAME, SURNAME, PHONE) values ('Colin', 'O''Neill', '+353445671234')
+  * }</pre>
+  *
+  * <p>Fields can be overwritten by simply calling {@link set set()} again with
+  * a valid value, and can be removed by setting their values to {@code null},
+  * an empty {@link String}, or an all-whitespace {@link String}:</p>
+  *
+  * <pre>{@code
+  * jshell> c.set("PhOnE", " ").set("firstNAME", "T'Challa")
+  * $8 ==> (FIRSTNAME, SURNAME) values ('T''Challa', 'O''Neill')
+  * }</pre>
   *
   **/
 public final class Contact {
@@ -41,6 +118,24 @@ public final class Contact {
     put("PHONE",     new SimpleEntry<String, String>("varchar(16)", null));
 
   }};
+
+  /**
+    * Returns a {@link Set} containing the name and SQL description of each
+    * piece of information which can be added to this {@link Contact} object.
+    *
+    * <p>The first element of each {@link Entry} is the SQL identifier for that
+    * particular piece of information (i.e. {@code "PHONE"}) and the second
+    * element is the SQL description (i.e. {@code "varchar(16)"}).</p>
+    *
+    * @return a {@link Set} containing the name and SQL description of each
+    * piece of information which can be added to this {@link Contact} object.
+    *
+    **/
+  public Set<Entry<String,String>> fields() {
+    return info.entrySet().stream().map(e ->
+      new SimpleEntry<String,String>(e.getKey(), e.getValue().getKey()))
+      .collect(Collectors.toSet());
+  }
 
   /**
     * Returns {@code true} if the specified {@code key} is valid (if a
@@ -117,7 +212,59 @@ public final class Contact {
     String KEY = key.toUpperCase();
     Entry<String,String> old = info.get(KEY);
 
-    if (value == null || "".equals(value.trim())) value = null;
+    //--------------------------------------------------------------------------
+    //  validate arguments
+    //--------------------------------------------------------------------------
+
+    // if value is null, no validation needed
+    if (value == null || "".equals(value.trim())) {
+      value = null;
+
+    } else {
+
+      Pattern p; Matcher m;
+      switch (KEY) {
+
+        case "FIRSTNAME":
+        case "SURNAME":
+
+          // only allow letters, spaces, dashes, and apostrophes in
+          // names, in an attempt to prevent SQL injection attacks
+
+          p = Pattern.compile("[^a-zA-Z -']");
+          m = p.matcher(value);
+
+          if (m.find()) {
+            IOUtils.printError("set()", "name fields can only contain letters, spaces, dashes (-) and apostrophes (')");
+            return this;
+          }
+
+          // if there are any apostrophes, escape by doubling them
+          value = value.replace("'", "''");
+
+        break;
+
+        case "PHONE":
+
+          // only allow numbers and + signs; formatting shouldn't be included in database
+
+          p = Pattern.compile("[^0-9+]");
+          m = p.matcher(value);
+
+          if (m.find()) {
+            IOUtils.printError("set()", "phone numbers can only contain digits and '+' signs");
+            return this;
+          }
+
+          if (value.lastIndexOf('+') > 0) {
+            IOUtils.printError("set()", "'+' can only appear as the first character in a phone number");
+            return this;
+          }
+
+        break;
+
+      } } // end else { switch(KEY) {
+
     info.put(KEY, new SimpleEntry<String, String>(old.getKey(), value));
     return this;
   }
@@ -148,7 +295,7 @@ public final class Contact {
 
     // if empty, return null
     if ("()".equals(varNames) && "('')".equals(varVals)) {
-      IOUtils.printError("toString()", "all contact information is null");
+//    IOUtils.printError("toString()", "all contact information is null");
       return null;
     }
 
