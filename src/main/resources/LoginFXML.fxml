@@ -10,7 +10,7 @@
 
 <GridPane
   xmlns:fx="http://javafx.com/fxml"
-  fx:controller="watson.FXMLController"
+  fx:controller="watson.LoginController"
   alignment="center" hgap="10" vgap="10">
   <padding><Insets top="25" right="25" bottom="10" left="25"/></padding>
 
