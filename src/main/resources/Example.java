@@ -216,14 +216,14 @@
 
 // DATA MANAGEMENT:
 //  - add README.md
-//  - clean up userOps code
+//  - clean up userOps code?
+
+// USER INTERFACE:
+//  - all of it
 //  - ability to search and sort (asc/desc on fields) contacts
 //    - do this within the user interface:
 //      - get the table with table("USERNAME.CONTACTS")
 //      - sort / search that List<List<String>>
-
-// USER INTERFACE:
-//  - all of it
 
 
 

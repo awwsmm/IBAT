@@ -19,6 +19,8 @@ import java.util.regex.Pattern;
 
 import java.util.stream.Collectors;
 
+import org.apache.derby.jdbc.EmbeddedDriver;
+
 /**
   * Class for creating, loading, and manipulating
   * <a href="https://db.apache.org/derby/">Apache Derby</a> databases.
@@ -766,6 +768,8 @@ public final class Database {
     } StringBuilder sb = optSB.get();
 
     try { // try to load database first, to avoid overwriting
+
+      DriverManager.registerDriver(new EmbeddedDriver());
       Optional<Connection> retval = Optional.of(DriverManager.getConnection(sb.toString()));
       return retval;
 

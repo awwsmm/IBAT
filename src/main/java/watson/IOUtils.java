@@ -55,7 +55,7 @@ public class IOUtils {
     **/
   protected static void printSQLException (String methodSignature, SQLException ex) {
     while (ex != null) {
-      System.err.printf("  SQLException | %s : %s [SQL State: %s, Error Code: %d]",
+      System.err.printf("  SQLException | %s : %s [SQL State: %s, Error Code: %d]%n",
         methodSignature, ex.getMessage(), ex.getSQLState(), ex.getErrorCode());
       ex = ex.getNextException();
     } System.err.println();
