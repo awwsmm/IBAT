@@ -2043,7 +2043,7 @@ public final class Database {
     // print an error and return
 
     if (!tables().contains(TABLE)) {
-      IOUtils.printError("printTable()", "table '" + tableName + "' cannot be found");
+      IOUtils.printError("table()", "table '" + tableName + "' cannot be found");
       return retval;
     }
 
@@ -2083,7 +2083,7 @@ public final class Database {
 
     // catch SQL errors
     } catch (SQLException ex) {
-      IOUtils.printSQLException("printTable()", ex);
+      IOUtils.printSQLException("table()", ex);
       retval.clear(); // clear the half-initialised list
       return retval;
   } }
