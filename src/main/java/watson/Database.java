@@ -1500,6 +1500,12 @@ public final class Database {
     try { // shift to uppercase
       String USERNAME = username.toUpperCase();
 
+      // check that user doesn't already exist
+      if (USERS.contains(USERNAME)) {
+        IOUtils.printError("addUser()", "user already exists");
+        return false;
+      }
+
       // passwords can contain symbols, etc., so we need a prepared statement
       if (!USERS.contains(USERNAME)) {
         ps_adduser.setString(1, USERNAME);

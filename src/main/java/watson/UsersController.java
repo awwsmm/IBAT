@@ -1,41 +1,37 @@
 package watson;
 
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-import javafx.scene.control.TableView;
-import javafx.fxml.FXML;
-import java.util.ResourceBundle;
-import javafx.fxml.Initializable;
-import java.util.List;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TextField;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-import javafx.beans.property.ReadOnlyObjectWrapper;
-import java.net.URL;
-import javafx.scene.control.PasswordField;
 import java.io.IOException;
-import javafx.scene.Parent;
-import javafx.fxml.FXMLLoader;
-import javafx.scene.Scene;
-import javafx.scene.text.Text;
-import javafx.scene.control.SelectionMode;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.MenuItem;
-import javafx.scene.input.MouseEvent;
-import javafx.scene.input.MouseButton;
-import javafx.event.EventHandler;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import javafx.application.Platform;
+import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
+import javafx.event.EventHandler;
+import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.ButtonType;
-import javafx.util.Pair;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Dialog;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.SelectionMode;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.VBox;
-import java.util.stream.Collectors;
-import javafx.application.Platform;
+import javafx.scene.text.Text;
+import javafx.util.Pair;
 
-
+import org.controlsfx.control.table.TableFilter;
 
 public class UsersController {
 
@@ -109,11 +105,11 @@ public class UsersController {
     //--------------------------------------------------------------------------
     //  build the right-click dialog menu
     //--------------------------------------------------------------------------
-
+/*
     ContextMenu cm = new ContextMenu();
 
     MenuItem mi1 = new MenuItem("Delete Selected Users");
-    MenuItem mi2 = new MenuItem("Print Selected Users");
+    MenuItem mi2 = new MenuItem("Reset Selected Users' Passwords");
 
     cm.getItems().add(mi1);
     cm.getItems().add(mi2);
@@ -126,118 +122,132 @@ public class UsersController {
           cm.show(usersTable, t.getScreenX(), t.getScreenY());
     } } });
 
-    // action for "delete" menu item
+    // Delete Selected Users
     mi1.setOnAction(new EventHandler<ActionEvent>() {
-      public void handle (ActionEvent t) {
-        Alert alert = new Alert(AlertType.CONFIRMATION,
-          "Are you sure you want to delete the selected users?",
-          ButtonType.YES, ButtonType.CANCEL);
-        alert.showAndWait();
-
-        // have the user verify that they want to delete these users
-        if (alert.getResult() == ButtonType.YES) {
-
-          // have the user re-enter their password
-          Dialog<Pair<String, String>> dialog = new Dialog<>();
-          dialog.setHeaderText("Confirm Password:");
-          dialog.getDialogPane().getButtonTypes().add(ButtonType.OK);
-
-          VBox contents = new VBox();
-          PasswordField password = new PasswordField();
-          contents.getChildren().add(password);
-          dialog.getDialogPane().setContent(contents);
-
-          // request focus on the password field by default
-          Platform.runLater(() -> password.requestFocus());
-
-          dialog.showAndWait();
-
-          // loop over users and delete each selected one
-          List<String> USERS = usersTable.getSelectionModel().getSelectedItems()
-            .stream().map(e -> e.get(0)).collect(Collectors.toList());
-
-          // the DBO cannot be deleted
-          String OWNER = LoginController.OWNER;
-
-          if (USERS.contains(OWNER)) {
-            alert = new Alert(AlertType.ERROR, "Database owner '" +
-              OWNER + "' cannot be deleted.", ButtonType.OK);
-            USERS.remove(OWNER);
-            alert.showAndWait();
-          }
-
-          // delete all non-DBO users
-          Boolean correctPassword = true;
-          for (String USER : USERS)
-            correctPassword = correctPassword &&
-              LoginController.db.deleteUser(USER, password.getCharacters().toString());
-
-          // alert if DBO password is incorrect
-          if (!correctPassword) {
-            alert = new Alert(AlertType.ERROR, "Incorrect password");
-            alert.showAndWait();
-          }
-
-          // refresh table view
-          LoginController.USERS = LoginController.db.users().get();
-
-          try {
-            Parent usersPage = FXMLLoader.load(getClass().getClassLoader().getResource("UsersFXML.fxml"));
-            App.scene = new Scene(usersPage, 800, 450);
-            App.stage.setScene(App.scene);
-            App.stage.show();
-
-          } catch (IOException ex) {
-            IOUtils.printError("initialize()", "IOException when refreshing table view");
-          }
-
-
-
-
-/*
-// Create the username and password labels and fields.
-GridPane grid = new GridPane();
-grid.setHgap(10);
-grid.setVgap(10);
-grid.setPadding(new Insets(20, 150, 10, 10));
-
-TextField username = new TextField();
-username.setPromptText("Username");
-PasswordField password = new PasswordField();
-password.setPromptText("Password");
-
-grid.add(new Label("Username:"), 0, 0);
-grid.add(username, 1, 0);
-grid.add(new Label("Password:"), 0, 1);
-grid.add(password, 1, 1);
-
-dialog.getDialogPane().setContent(grid);
-
-
-
-
-            
-
-*/
-
-
-
-//          LoginController.db.
-        }
-
-      }
+      public void handle (ActionEvent t) { handleHelper("DELETE"); }
     });
 
+    // Reset Selected Users' Passwords
     mi2.setOnAction(new EventHandler<ActionEvent>() {
-      public void handle (ActionEvent t) {
-        usersTable.getSelectionModel().getSelectedItems().stream().forEach(System.out::println);
-    } });
-
-
-
-
+      public void handle (ActionEvent t) { handleHelper("RESET"); }
+    });
+*/
+    // add filtering capabilities to table
+    TableFilter filter = new TableFilter(usersTable);
 
   } // end initialize()
+
+  //--------------------------------------------------------------------------
+  //  helper method to verify owner password, etc.
+  //--------------------------------------------------------------------------
+
+  private boolean handleHelper(String FUNCTION) {
+
+    String msg = null;
+    String ownerWarning = null;
+
+    switch (FUNCTION) {
+
+      case "DELETE":
+        msg = "Are you sure you want to delete the selected users?";
+        ownerWarning = "Database owner cannot be deleted.";
+        break;
+
+      case "RESET":
+        msg = "Are you sure you want to reset these users' passwords?";
+        ownerWarning = "Database owner cannot reset their own password.";
+        break;
+
+      default:
+        return false;
+    }
+
+    Alert alert = new Alert(AlertType.CONFIRMATION, msg,
+      ButtonType.YES, ButtonType.CANCEL);
+    alert.showAndWait();
+
+    // have the user verify that they want to delete these users
+    if (alert.getResult() == ButtonType.YES) {
+
+      // have the user re-enter their password
+      Dialog<Pair<String, String>> dialog = new Dialog<>();
+      dialog.setHeaderText("Confirm Password:");
+      dialog.getDialogPane().getButtonTypes().add(ButtonType.OK);
+
+      VBox contents = new VBox();
+      PasswordField password = new PasswordField();
+      contents.getChildren().add(password);
+      dialog.getDialogPane().setContent(contents);
+
+      // request focus on the password field by default
+      Platform.runLater(() -> password.requestFocus());
+      dialog.showAndWait();
+
+      // loop over users and delete each selected one
+      List<String> USERS = usersTable.getSelectionModel().getSelectedItems()
+        .stream().map(e -> e.get(0)).collect(Collectors.toList());
+
+      // the DBO cannot be deleted or have their password reset
+      String OWNER = LoginController.OWNER;
+
+      if (USERS.contains(OWNER)) {
+        alert = new Alert(AlertType.ERROR, ownerWarning, ButtonType.OK);
+        USERS.remove(OWNER);
+        alert.showAndWait();
+      }
+
+      // delete all non-DBO users
+      Boolean correctPassword = true;
+      for (String USER : USERS) {
+        switch (FUNCTION) {
+
+          case "DELETE":
+            correctPassword = correctPassword &&
+              LoginController.db.deleteUser(USER, password.getCharacters().toString());
+            break;
+
+          case "RESET":
+            correctPassword = correctPassword &&
+              LoginController.db.resetPassword(USER, (USER + "pass").toLowerCase(),
+                password.getCharacters().toString());
+            break;
+
+          default:
+            return false;
+        }
+
+        if (!correctPassword) break;
+      } // end loop over USERS
+
+      // alert if DBO password is incorrect
+      if (!correctPassword) {
+        alert = new Alert(AlertType.ERROR, "Incorrect password");
+        alert.showAndWait();
+        return false;
+      }
+
+      // refresh table view and send message to user
+      LoginController.USERS = LoginController.db.users().get();
+
+      try {
+        Parent usersPage = FXMLLoader.load(getClass().getClassLoader().getResource("UsersFXML.fxml"));
+        App.scene = new Scene(usersPage, 800, 450);
+        App.stage.setScene(App.scene);
+        App.stage.show();
+        return true;
+
+      } catch (IOException ex) {
+        IOUtils.printError("initialize()", "IOException when refreshing table view");
+        usersMessage.setText("Error refreshing table");
+        return false;
+      }
+    }
+
+    return false;
+  } // end handleHelper()
+
+
+
 
   @FXML
   public void addUserButton() throws IOException {
@@ -248,8 +258,6 @@ dialog.getDialogPane().setContent(grid);
       ownerPassword.getCharacters().toString());
 
     if (success) {
-      usersMessage.setText("User '" + newUserName.getCharacters().toString() + "' successfully added");
-
       LoginController.USERS = LoginController.db.users().get();
 
       Parent usersPage = FXMLLoader.load(getClass().getClassLoader().getResource("UsersFXML.fxml"));
@@ -259,10 +267,6 @@ dialog.getDialogPane().setContent(grid);
 
     } else
       usersMessage.setText("User could not be added. See log for details.");
-
-
-
-
   }
 
 

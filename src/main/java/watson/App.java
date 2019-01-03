@@ -23,7 +23,7 @@ public class App extends Application {
     scene = new Scene(loginPage, 800, 450);
 
     stage = s;
-    stage.setTitle("title");
+    stage.setTitle("MyContacts :: Log In");
     stage.setScene(scene);
     stage.show();
   }

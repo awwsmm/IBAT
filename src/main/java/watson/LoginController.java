@@ -67,6 +67,7 @@ public class LoginController {
         message.setText(""); // open up the default page -- the users management page
         Parent usersPage = FXMLLoader.load(getClass().getClassLoader().getResource("UsersFXML.fxml"));
         App.scene = new Scene(usersPage, 800, 450);
+        App.stage.setTitle("MyContacts :: User Management");
         App.stage.setScene(App.scene);
         App.stage.show();
 
@@ -76,6 +77,7 @@ public class LoginController {
         message.setText(""); // open up the default page -- the contacts page
         Parent contactsPage = FXMLLoader.load(getClass().getClassLoader().getResource("ContactsFXML.fxml"));
         App.scene = new Scene(contactsPage, 800, 450);
+        App.stage.setTitle("MyContacts :: Contacts Table");
         App.stage.setScene(App.scene);
         App.stage.show();
 
