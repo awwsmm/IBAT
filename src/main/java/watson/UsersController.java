@@ -31,7 +31,9 @@ import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import javafx.util.Pair;
 
-import org.controlsfx.control.table.TableFilter;
+import static watson.MasterController.*;
+
+
 
 public class UsersController {
 
@@ -57,17 +59,17 @@ public class UsersController {
 
     // loop over all users, get each username, hash, salt
     boolean firstUser = true;
-    for (String USER : LoginController.USERS) {
+    for (String USER : USERS) {
 
       // convert table to FX-formatted table
-      List<List<String>> TABLE = LoginController.db.table(USER + ".SECURE");
+      List<List<String>> TABLE = db.table(USER + ".SECURE");
 
       // if DBO, these are "N/A"
       String nContacts, nGroups;
 
-      if (!LoginController.OWNER.equals(USER)) {
-        nContacts = ((Integer) (LoginController.db.table(USER + ".CONTACTS").size() - 1)).toString();
-        nGroups = ((Integer) (LoginController.db.table(USER + ".GROUPS").size() - 1)).toString();
+      if (!OWNER.equals(USER)) {
+        nContacts = ((Integer) (db.table(USER + ".CONTACTS").size() - 1)).toString();
+        nGroups = ((Integer) (db.table(USER + ".GROUPS").size() - 1)).toString();
       } else {
         nContacts = "N/A";
         nGroups = "N/A";
@@ -124,24 +126,23 @@ public class UsersController {
 
     // Delete Selected Users
     mi1.setOnAction(new EventHandler<ActionEvent>() {
-      public void handle (ActionEvent t) { handleHelper("DELETE"); }
+      public void handle (ActionEvent t) { usersOpsHelper("DELETE"); }
     });
 
     // Reset Selected Users' Passwords
     mi2.setOnAction(new EventHandler<ActionEvent>() {
-      public void handle (ActionEvent t) { handleHelper("RESET"); }
+      public void handle (ActionEvent t) { usersOpsHelper("RESET"); }
     });
 */
     // add filtering capabilities to table
-    TableFilter filter = new TableFilter(usersTable);
 
   } // end initialize()
 
   //--------------------------------------------------------------------------
-  //  helper method to verify owner password, etc.
+  //  helper method to verify owner password, etc. before users operations
   //--------------------------------------------------------------------------
 
-  private boolean handleHelper(String FUNCTION) {
+  private boolean usersOpsHelper (String FUNCTION) {
 
     String msg = null;
     String ownerWarning = null;
@@ -187,9 +188,6 @@ public class UsersController {
       List<String> USERS = usersTable.getSelectionModel().getSelectedItems()
         .stream().map(e -> e.get(0)).collect(Collectors.toList());
 
-      // the DBO cannot be deleted or have their password reset
-      String OWNER = LoginController.OWNER;
-
       if (USERS.contains(OWNER)) {
         alert = new Alert(AlertType.ERROR, ownerWarning, ButtonType.OK);
         USERS.remove(OWNER);
@@ -203,13 +201,12 @@ public class UsersController {
 
           case "DELETE":
             correctPassword = correctPassword &&
-              LoginController.db.deleteUser(USER, password.getCharacters().toString());
+              db.deleteUser(USER, get(password));
             break;
 
           case "RESET":
             correctPassword = correctPassword &&
-              LoginController.db.resetPassword(USER, (USER + "pass").toLowerCase(),
-                password.getCharacters().toString());
+              db.resetPassword(USER, (USER + "pass").toLowerCase(), get(password));
             break;
 
           default:
@@ -227,24 +224,25 @@ public class UsersController {
       }
 
       // refresh table view and send message to user
-      LoginController.USERS = LoginController.db.users().get();
+      USERS = db.users().get();
 
-      try {
-        Parent usersPage = FXMLLoader.load(getClass().getClassLoader().getResource("UsersFXML.fxml"));
-        App.scene = new Scene(usersPage, 800, 450);
-        App.stage.setScene(App.scene);
-        App.stage.show();
+//      try {
+        refreshApp("UsersFXML.fxml");
+//        Parent usersPage = FXMLLoader.load(getClass().getClassLoader().getResource("UsersFXML.fxml"));
+//        App.scene = new Scene(usersPage, 800, 450);
+//        App.stage.setScene(App.scene);
+//        App.stage.show();
         return true;
 
-      } catch (IOException ex) {
-        IOUtils.printError("initialize()", "IOException when refreshing table view");
-        usersMessage.setText("Error refreshing table");
-        return false;
-      }
+//      } catch (IOException ex) {
+//        IOUtils.printError("initialize()", "IOException when refreshing table view");
+//        usersMessage.setText("Error refreshing table");
+//        return false;
+//      }
     }
 
     return false;
-  } // end handleHelper()
+  } // end usersOpsHelper()
 
 
 
@@ -252,21 +250,38 @@ public class UsersController {
   @FXML
   public void addUserButton() throws IOException {
 
-    boolean success = LoginController.db.addUser(
-      newUserName.getCharacters().toString(),
-      newUserPassword.getCharacters().toString(),
-      ownerPassword.getCharacters().toString());
+    boolean success = db.addUser(
+      get(newUserName), get(newUserPassword), get(ownerPassword));
 
     if (success) {
-      LoginController.USERS = LoginController.db.users().get();
+      USERS = db.users().get();
+      refreshApp("UsersFXML.fxml");
 
-      Parent usersPage = FXMLLoader.load(getClass().getClassLoader().getResource("UsersFXML.fxml"));
-      App.scene = new Scene(usersPage, 800, 450);
-      App.stage.setScene(App.scene);
-      App.stage.show();
+//      Parent usersPage = FXMLLoader.load(getClass().getClassLoader().getResource("UsersFXML.fxml"));
+//      App.scene = new Scene(usersPage, 800, 450);
+//      App.stage.setScene(App.scene);
+//      App.stage.show();
 
     } else
       usersMessage.setText("User could not be added. See log for details.");
+  }
+
+
+  @FXML
+  private boolean changePassword() {
+return false;
+//return false; //     return MasterController.changePassword();
+  }
+
+  @FXML
+  private boolean logout() {
+return false;
+//return false; //     return MasterController.logout();
+  }
+
+  @FXML
+  private boolean quit() {
+return false; //     return MasterController.quit();
   }
 
 

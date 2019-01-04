@@ -22,29 +22,33 @@
   <top>
     <MenuBar>
       <menus>
-         <Menu text="File">
+         <Menu text="Account">
+           <items>
+             <MenuItem text="Change Password" onAction="#changePassword"/>
+             <MenuItem text="Log Out" onAction="#logout"/>
+             <MenuItem text="Quit" onAction="#quit"/>
+           </items>
+         </Menu>
+         <Menu text="Users">
             <items>
-               <MenuItem text="New"/>
-               <MenuItem text="Open"/>
-               <MenuItem text="Save"/>
-               <MenuItem text="Save As"/>
-               <SeparatorMenuItem  />
-               <MenuItem text="Exit"/>
+               <MenuItem text="Create New"/>
+               <MenuItem text="Delete Selected Users"/>
+               <MenuItem text="Reset Selected Users' Passwords"/>
             </items>
          </Menu>
-         <Menu text="Edit">
+         <Menu text="Tables">
             <items>
                <MenuItem text="Copy"/>
                <MenuItem text="Cut"/>
                <MenuItem text="Paste"/>
             </items>
          </Menu>
-         <Menu text="Help">
-            <items>
-               <MenuItem text="Search" disable="true"/>
-               <MenuItem text="Online Manual" visible="false"/>
+         <Menu text="About">
+            <items> <!-- disable / visible available for below -->
+               <MenuItem text="About MyContacts"/>
+               <MenuItem text="MyContacts on GitHub"/>
                <SeparatorMenuItem />
-               <MenuItem text="About"/>
+               <MenuItem text="About the Author"/>
             </items>
          </Menu>
       </menus>

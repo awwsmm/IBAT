@@ -539,6 +539,16 @@ public final class Database {
   ///---------------------------------------------------------------------------
 
   /**
+    * Returns the name of the database, or {@code null} if the database has not
+    * yet been initialised.
+    *
+    * @return the name of the database, or {@code null} if the database has not
+    * yet been initialised.
+    *
+    **/
+  public static String name() { return derbyName; }
+
+  /**
     * Closes the connection to the current database, if such a connection
     * exists; resets all variables.
     *

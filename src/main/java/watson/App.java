@@ -1,30 +1,32 @@
 package watson;
 
 import javafx.application.Application;
-import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
-import javafx.scene.Parent;
 
-import java.io.IOException;
+import static watson.MasterController.*;
 
+/**
+  * Main {@link Application} of MyContacts.
+  *
+  **/
 public class App extends Application {
 
+  /** Main {@link Scene} of app. **/
   protected static Scene scene;
+
+  /** Main {@link Stage} of app. **/
   protected static Stage stage;
 
+  /** Entry point for MyContacts application. **/
   public static void main (String[] args) {
-    launch(args);
+    launch (args);
   }
 
   @Override
-  public void start (Stage s) throws IOException {
-    Parent loginPage = FXMLLoader.load(getClass().getClassLoader().getResource("LoginFXML.fxml"));
-    scene = new Scene(loginPage, 800, 450);
-
+  public void start (Stage s) {
     stage = s;
-    stage.setTitle("MyContacts :: Log In");
-    stage.setScene(scene);
-    stage.show();
+    refreshApp("LoginFXML.fxml", "MyContacts :: Log In");
   }
+
 }
