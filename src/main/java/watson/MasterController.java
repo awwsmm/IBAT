@@ -7,6 +7,19 @@ import javafx.scene.Scene;
 import javafx.scene.control.TextField;
 import javafx.fxml.FXMLLoader;
 
+
+
+import javafx.application.Platform;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.PasswordField;
+import javafx.scene.layout.GridPane;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
+import javafx.scene.control.ButtonType;
+import javafx.util.Pair;
+import javafx.scene.control.Label;
+
+
 import static watson.App.*;
 
 /**
@@ -76,7 +89,7 @@ public class MasterController {
 
     } catch (IOException ex) {
       IOUtils.printError("refreshApp()", "IOException while attempting to refresh app");
-      ex.printStackTrace();
+//    ex.printStackTrace();
       return false;
     }
   }
@@ -96,20 +109,92 @@ public class MasterController {
   //----------------------------------------------------------------------------
   //  methods common to multiple pages : called by lesser controllers
   //----------------------------------------------------------------------------
-/*
+
+  /**
+    * Opens a prompt to change the user's password, then logs them out so they
+    * can log back in with their new password.
+    *
+    * @param oldPassword the user's current password
+    * @param newPassword the user's new password
+    *
+    * @return {@code true} if and only if the user's password was successfully
+    * changed from the {@code oldPassword} to the {@code newPassword}
+    *
+    **/
   protected static boolean changePassword() {
-    System.out.println("\"Change Password\" pressed");
-    return false;
+
+    // have the user re-enter their password
+    Dialog<ButtonType> dialog = new Dialog<>();
+    dialog.setHeaderText("Change Password:");
+    dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+    GridPane contents = new GridPane();
+
+    Label oldLabel  = new Label("Current password:");
+    Label newLabel1 = new Label("New password:");
+    Label newLabel2 = new Label("Repeat new password:");
+
+    contents.add(oldLabel,  0, 0);
+    contents.add(newLabel1, 0, 1);
+    contents.add(newLabel2, 0, 2);
+
+    PasswordField oldPass  = new PasswordField();
+    PasswordField newPass1 = new PasswordField();
+    PasswordField newPass2 = new PasswordField();
+
+    contents.add(oldPass,   1, 0);
+    contents.add(newPass1,  1, 1);
+    contents.add(newPass2,  1, 2);
+
+    dialog.getDialogPane().setContent(contents);
+
+    // request focus on the old password field by default
+    Platform.runLater(() -> oldPass.requestFocus());
+    dialog.showAndWait();
+
+    // quietly cancel if "CANCEL" button was clicked
+    if (dialog.getResult() == ButtonType.CANCEL) return false;
+
+    // ...otherwise, create a new alert
+    Alert alert = new Alert(AlertType.CONFIRMATION, "", ButtonType.OK);
+
+    if (!get(newPass1).equals(get(newPass2))) {
+      alert.setContentText("New passwords do not match. Password not changed.");
+      alert.showAndWait();
+      return false;
+    }
+
+    // attempt to change this user's password
+    boolean success = db.changePassword(get(oldPass), get(newPass1));
+
+    if (success) {
+      alert.setContentText("Password successfully changed. You will now be logged out.");
+      alert.showAndWait();
+      logout();
+      return true;
+
+    } else {
+      alert.setContentText("Password could not be changed. See log for details.");
+      alert.showAndWait();
+      return false;
+    }
   }
 
-  protected static boolean logout() {
-    System.out.println("\"Log Out\" pressed");
-    return false;
+  /**
+    * Returns to the login screen and disconnects the database (logs out the user).
+    *
+    **/
+  protected static void logout() {
+    refreshApp("LoginFXML.fxml", "MyContacts :: Log In");
+    db.disconnect();
   }
 
-  protected static boolean quit() {
-    System.out.println("\"Quit\" pressed");
-    return false;
+  /**
+    * Logs the user out, then quits the program.
+    *
+    **/
+  protected static void quit() {
+    logout(); System.exit(0);
   }
-*/
+
 }

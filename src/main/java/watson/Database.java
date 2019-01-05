@@ -1906,7 +1906,7 @@ public final class Database {
       ps_chpwd.execute();
 
       // inform the user that the password has been successfully changed
-      IOUtils.printMessage("resetPassword()", "password successfully changed");
+      IOUtils.printMessage("resetPassword()", "password successfully reset");
       return true;
 
     // catch SQL errors

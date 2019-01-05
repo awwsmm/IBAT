@@ -32,15 +32,15 @@
          <Menu text="Users">
             <items>
                <MenuItem text="Create New"/>
-               <MenuItem text="Delete Selected Users"/>
-               <MenuItem text="Reset Selected Users' Passwords"/>
+               <MenuItem text="Delete Selected Users" onAction="#deleteUsers"/>
+               <MenuItem text="Reset Selected Users' Passwords" onAction="#resetPasswords"/>
             </items>
          </Menu>
          <Menu text="Tables">
             <items>
-               <MenuItem text="Copy"/>
-               <MenuItem text="Cut"/>
-               <MenuItem text="Paste"/>
+               <MenuItem text="Contacts"/>
+               <MenuItem text="Groups"/>
+               <MenuItem text="Secure"/>
             </items>
          </Menu>
          <Menu text="About">

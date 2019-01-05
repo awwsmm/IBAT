@@ -50,15 +50,12 @@ public class UsersController {
   @FXML
   public void initialize() {
 
-    //--------------------------------------------------------------------------
-    //  build the user information table
-    //--------------------------------------------------------------------------
-
     TableColumn<ObservableList<String>, String> column;
     data.clear();
 
     // loop over all users, get each username, hash, salt
     boolean firstUser = true;
+    USERS = db.users().get();
     for (String USER : USERS) {
 
       // convert table to FX-formatted table
@@ -104,39 +101,13 @@ public class UsersController {
     usersTable.setItems(data);
     usersTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
 
-    //--------------------------------------------------------------------------
-    //  build the right-click dialog menu
-    //--------------------------------------------------------------------------
-/*
-    ContextMenu cm = new ContextMenu();
-
-    MenuItem mi1 = new MenuItem("Delete Selected Users");
-    MenuItem mi2 = new MenuItem("Reset Selected Users' Passwords");
-
-    cm.getItems().add(mi1);
-    cm.getItems().add(mi2);
-
-    // display the menu when the user right-clicks on the table
-    usersTable.addEventHandler(MouseEvent.MOUSE_CLICKED, new EventHandler<MouseEvent>() {
-      @Override
-      public void handle(MouseEvent t) {
-        if(t.getButton() == MouseButton.SECONDARY) {
-          cm.show(usersTable, t.getScreenX(), t.getScreenY());
-    } } });
-
-    // Delete Selected Users
-    mi1.setOnAction(new EventHandler<ActionEvent>() {
-      public void handle (ActionEvent t) { usersOpsHelper("DELETE"); }
-    });
-
-    // Reset Selected Users' Passwords
-    mi2.setOnAction(new EventHandler<ActionEvent>() {
-      public void handle (ActionEvent t) { usersOpsHelper("RESET"); }
-    });
-*/
-    // add filtering capabilities to table
-
   } // end initialize()
+
+  @FXML
+  private boolean deleteUsers() { return usersOpsHelper("DELETE"); }
+
+  @FXML
+  private boolean resetPasswords() { return usersOpsHelper("RESET"); }
 
   //--------------------------------------------------------------------------
   //  helper method to verify owner password, etc. before users operations
@@ -225,20 +196,8 @@ public class UsersController {
 
       // refresh table view and send message to user
       USERS = db.users().get();
-
-//      try {
-        refreshApp("UsersFXML.fxml");
-//        Parent usersPage = FXMLLoader.load(getClass().getClassLoader().getResource("UsersFXML.fxml"));
-//        App.scene = new Scene(usersPage, 800, 450);
-//        App.stage.setScene(App.scene);
-//        App.stage.show();
-        return true;
-
-//      } catch (IOException ex) {
-//        IOUtils.printError("initialize()", "IOException when refreshing table view");
-//        usersMessage.setText("Error refreshing table");
-//        return false;
-//      }
+      refreshApp("UsersFXML.fxml");
+      return true;
     }
 
     return false;
@@ -248,7 +207,7 @@ public class UsersController {
 
 
   @FXML
-  public void addUserButton() throws IOException {
+  public void addUserButton() { // throws IOException {
 
     boolean success = db.addUser(
       get(newUserName), get(newUserPassword), get(ownerPassword));
@@ -257,32 +216,16 @@ public class UsersController {
       USERS = db.users().get();
       refreshApp("UsersFXML.fxml");
 
-//      Parent usersPage = FXMLLoader.load(getClass().getClassLoader().getResource("UsersFXML.fxml"));
-//      App.scene = new Scene(usersPage, 800, 450);
-//      App.stage.setScene(App.scene);
-//      App.stage.show();
-
     } else
       usersMessage.setText("User could not be added. See log for details.");
   }
 
+  //----------------------------------------------------------------------------
+  //  menu items common to all pages: defined in MasterController.java
+  //----------------------------------------------------------------------------
 
-  @FXML
-  private boolean changePassword() {
-return false;
-//return false; //     return MasterController.changePassword();
-  }
-
-  @FXML
-  private boolean logout() {
-return false;
-//return false; //     return MasterController.logout();
-  }
-
-  @FXML
-  private boolean quit() {
-return false; //     return MasterController.quit();
-  }
-
+  @FXML private boolean changePassword() { return MasterController.changePassword(); }
+  @FXML private void logout() { MasterController.logout(); }
+  @FXML private void quit() { MasterController.quit(); }
 
 }
