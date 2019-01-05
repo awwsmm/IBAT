@@ -4,48 +4,45 @@ import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import java.awt.Desktop;
+import java.net.URISyntaxException;
+import java.net.URL;
+
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.event.ActionEvent;
-import javafx.event.EventHandler;
 import javafx.fxml.FXML;
-import javafx.fxml.FXMLLoader;
-import javafx.scene.Parent;
-import javafx.scene.Scene;
+import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Dialog;
-import javafx.scene.control.MenuItem;
+import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
-import javafx.scene.input.MouseButton;
-import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.text.Text;
-import javafx.util.Pair;
 
 import static watson.MasterController.*;
 
-
-
 public class UsersController {
 
-  @FXML private TextField      newUserName;
-  @FXML private PasswordField  newUserPassword;
-  @FXML private PasswordField  ownerPassword;
-  @FXML private Text           usersMessage;
+  //----------------------------------------------------------------------------
+  //  objects in FXML UI, local variables
+  //----------------------------------------------------------------------------
 
-  @FXML
-  private TableView<ObservableList<String>> usersTable;
+  @FXML private TableView<ObservableList<String>>  usersTable;
 
-  private static ObservableList<ObservableList<String>> data = FXCollections.observableArrayList();
+  private static ObservableList<ObservableList<String>> data
+    = FXCollections.observableArrayList();
+
+  //----------------------------------------------------------------------------
+  //  method called when UsersFXML.fxml is loaded
+  //----------------------------------------------------------------------------
 
   @FXML
   public void initialize() {
@@ -103,99 +100,169 @@ public class UsersController {
 
   } // end initialize()
 
+  //----------------------------------------------------------------------------
+  //  'Users' menu items
+  //----------------------------------------------------------------------------
+
+  @FXML
+  private boolean addUser() { return usersOpsHelper("ADD"); }
+
   @FXML
   private boolean deleteUsers() { return usersOpsHelper("DELETE"); }
 
   @FXML
   private boolean resetPasswords() { return usersOpsHelper("RESET"); }
 
-  //--------------------------------------------------------------------------
-  //  helper method to verify owner password, etc. before users operations
-  //--------------------------------------------------------------------------
-
+  // helper method for 'Users' menu items, above
   private boolean usersOpsHelper (String FUNCTION) {
 
-    String msg = null;
-    String ownerWarning = null;
+    boolean  conf        = false; // confirm action
+    String   confMessage = null;  // confirmation prompt
+    String  errorMessage = null;  // default error message
 
     switch (FUNCTION) {
 
       case "DELETE":
-        msg = "Are you sure you want to delete the selected users?";
-        ownerWarning = "Database owner cannot be deleted.";
+        conf = true;
+        confMessage = "Are you sure you want to delete the selected users?";
+        errorMessage = "The database owner, \"" + OWNER + "\", cannot be deleted.";
         break;
 
       case "RESET":
-        msg = "Are you sure you want to reset these users' passwords?";
-        ownerWarning = "Database owner cannot reset their own password.";
+        conf = true;
+        confMessage = "Are you sure you want to reset these users' passwords?";
+        errorMessage = "The database owner cannot reset their own password. " +
+          "Instead, change your password by selecting 'Account' > 'Change " +
+          "Password' from the menu.";
+        break;
+
+      case "ADD":
+        conf = false;
+        errorMessage = "The user \"%s\" already exists. Try a different " +
+          "username. (Remember that usernames are not case-sensitive: " +
+          "\"Jeff\" is the same user as \"JEFF\".)";
         break;
 
       default:
         return false;
     }
 
-    Alert alert = new Alert(AlertType.CONFIRMATION, msg,
-      ButtonType.YES, ButtonType.CANCEL);
-    alert.showAndWait();
+    Alert alert;  // if confirmation is needed from the user, send an
+    if (conf) {   // alert and wait for the user's response
+      alert = new Alert(AlertType.CONFIRMATION, confMessage,
+        ButtonType.YES, ButtonType.CANCEL);
+      alert.showAndWait();
+      conf = conf && (alert.getResult() != ButtonType.YES);
+    }
 
-    // have the user verify that they want to delete these users
-    if (alert.getResult() == ButtonType.YES) {
+    // if conf == false here, we don't need confirmation OR we got it
+    if (!conf) { // alert.getResult() == ButtonType.YES) {
 
-      // have the user re-enter their password
-      Dialog<Pair<String, String>> dialog = new Dialog<>();
+      // have the DBO re-enter their password
+      Dialog<ButtonType> dialog = new Dialog<>();
       dialog.setHeaderText("Confirm Password:");
-      dialog.getDialogPane().getButtonTypes().add(ButtonType.OK);
+      dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
-      VBox contents = new VBox();
+      VBox vb = new VBox();
       PasswordField password = new PasswordField();
-      contents.getChildren().add(password);
-      dialog.getDialogPane().setContent(contents);
+      vb.getChildren().add(password);
+      dialog.getDialogPane().setContent(vb);
 
       // request focus on the password field by default
       Platform.runLater(() -> password.requestFocus());
       dialog.showAndWait();
 
-      // loop over users and delete each selected one
-      List<String> USERS = usersTable.getSelectionModel().getSelectedItems()
-        .stream().map(e -> e.get(0)).collect(Collectors.toList());
-
-      if (USERS.contains(OWNER)) {
-        alert = new Alert(AlertType.ERROR, ownerWarning, ButtonType.OK);
-        USERS.remove(OWNER);
-        alert.showAndWait();
-      }
-
-      // delete all non-DBO users
-      Boolean correctPassword = true;
-      for (String USER : USERS) {
-        switch (FUNCTION) {
-
-          case "DELETE":
-            correctPassword = correctPassword &&
-              db.deleteUser(USER, get(password));
-            break;
-
-          case "RESET":
-            correctPassword = correctPassword &&
-              db.resetPassword(USER, (USER + "pass").toLowerCase(), get(password));
-            break;
-
-          default:
-            return false;
-        }
-
-        if (!correctPassword) break;
-      } // end loop over USERS
+      // quietly quit if user closed window or clicked "CANCEL"
+      if (dialog.getResult() != ButtonType.OK) return false;
 
       // alert if DBO password is incorrect
-      if (!correctPassword) {
+      if (!db.verifyPassword(OWNER, get(password))) {
         alert = new Alert(AlertType.ERROR, "Incorrect password");
         alert.showAndWait();
         return false;
       }
 
-      // refresh table view and send message to user
-      USERS = db.users().get();
+      // if DELETE or RESET, get list of users to act on:
+      if (FUNCTION.equals("DELETE") || FUNCTION.equals("RESET")) {
+
+        List<String> USERS = usersTable.getSelectionModel().getSelectedItems()
+          .stream().map(e -> e.get(0)).collect(Collectors.toList());
+
+        // to avoid confusion, cancel entirely if DBO is selected
+        if (USERS.contains(OWNER)) {
+          alert = new Alert(AlertType.ERROR, errorMessage, ButtonType.OK);
+          alert.showAndWait();
+          return false;
+        }
+
+        // act on all non-DBO users
+        for (String USER : USERS) {
+          switch (FUNCTION) {
+
+            case "DELETE":
+              db.deleteUser(USER, get(password));
+              break;
+
+            case "RESET":
+              db.resetPassword(USER, (USER + "pass").toLowerCase(), get(password));
+              break;
+
+            default:
+              return false;
+          }
+        }
+
+      } else if (FUNCTION.equals("ADD")) {
+
+        // have the user re-enter their password
+        dialog = new Dialog<>();
+        dialog.setHeaderText("Add New User:");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        GridPane gp = new GridPane();
+
+        Label uLabel = new Label("New User Name:");
+        Label pLabel = new Label("New User Password:");
+
+        gp.add(uLabel, 0, 0);
+        gp.add(pLabel, 0, 1);
+
+        TextField username = new TextField();
+        PasswordField userpass = new PasswordField();
+
+        gp.add(username, 1, 0);
+        gp.add(userpass, 1, 1);
+
+        gp.setPadding(new Insets(10, 10, 10, 10));
+        gp.setHgap(10);
+        gp.setVgap(10);
+        dialog.getDialogPane().setContent(gp);
+
+        // request focus on the old password field by default
+        Platform.runLater(() -> username.requestFocus());
+        dialog.showAndWait();
+
+        // quietly quit if user closed window or clicked "CANCEL"
+        if (dialog.getResult() != ButtonType.OK) return false;
+
+        // ...otherwise, create a new alert
+        alert = new Alert(AlertType.CONFIRMATION, "", ButtonType.OK);
+
+        // attempt to add a new user
+        boolean success = db.addUser(get(username), get(userpass), get(password));
+
+        if (success) {
+          alert.setContentText("New user successfully added.");
+          alert.showAndWait();
+
+        } else {
+          alert.setContentText("New user could not be created. See log for details.");
+          alert.showAndWait();
+          return false;
+        }
+
+      } else return false;
+
       refreshApp("UsersFXML.fxml");
       return true;
     }
@@ -203,21 +270,31 @@ public class UsersController {
     return false;
   } // end usersOpsHelper()
 
+  //----------------------------------------------------------------------------
+  //  'About' menu items
+  //----------------------------------------------------------------------------
 
+  private void web (String url) {
+    try {
+      Desktop.getDesktop().browse(new URL(url).toURI());
 
+    } catch (IOException ex) {
+      IOUtils.printError("web()",
+        "IOException encountered while trying to navigate to " + url);
+
+    } catch (URISyntaxException ex) {
+      IOUtils.printError("web()",
+        "URISyntaxException encountered while trying to navigate to " + url);
+  } }
 
   @FXML
-  public void addUserButton() { // throws IOException {
+  private void gotoGitHub() {
+    web("https://github.com/awwsmm/IBAT");
+  }
 
-    boolean success = db.addUser(
-      get(newUserName), get(newUserPassword), get(ownerPassword));
-
-    if (success) {
-      USERS = db.users().get();
-      refreshApp("UsersFXML.fxml");
-
-    } else
-      usersMessage.setText("User could not be added. See log for details.");
+  @FXML
+  private void gotoWebsite() {
+    web("http://awwsmm.com/");
   }
 
   //----------------------------------------------------------------------------
@@ -229,3 +306,4 @@ public class UsersController {
   @FXML private void quit() { MasterController.quit(); }
 
 }
+

@@ -1356,7 +1356,7 @@ public final class Database {
 
   ///---------------------------------------------------------------------------
   ///
-  ///  LIST, ADD, DELETE USERS; CHANGE, RESET USER PASSWORDS
+  ///  LIST, ADD, DELETE USERS; CHANGE, RESET, VERIFY USER PASSWORDS
   ///
   ///---------------------------------------------------------------------------
 
@@ -1480,39 +1480,21 @@ public final class Database {
       return false;
     }
 
-    try { // verify the DBO's password
-      // get the salt and hash from the DBO's SECURE table
-      resultSet = this.statement.executeQuery("select * from " + OWNER + ".SECURE");
-      resultSet.next();
-
-      String salt = resultSet.getString(1);
-      String hash = resultSet.getString(2);
-
-      // check if given password can be transformed to hash in database
-      boolean isValid = PasswordUtils.verifyPassword(dboPassword, hash, salt);
-
-      // if valid, continue, otherwise return false
-      if (!isValid) {
-        IOUtils.printError("addUser()", "could not verify database owner's password");
-        return false;
-      }
-
-    // catch SQL exceptions
-    } catch (SQLException ex) {
-      IOUtils.printSQLException("addUser()", ex);
-      return false;
-    }
+    // verify the DBO's password
+    if(!verifyPassword(OWNER, dboPassword)) return false;
 
     //--------------------------------------------------------------------------
     //  try to create a new user, if that user doesn't already exist
     //--------------------------------------------------------------------------
 
-    try { // shift to uppercase
-      String USERNAME = username.toUpperCase();
+    // shift to uppercase
+    String USERNAME = username.toUpperCase();
+
+    try {
 
       // check that user doesn't already exist
       if (USERS.contains(USERNAME)) {
-        IOUtils.printError("addUser()", "user already exists");
+        IOUtils.printError("addUser()", "user \"" + USERNAME + "\" already exists");
         return false;
       }
 
@@ -1600,7 +1582,7 @@ public final class Database {
       // if we've made it here and no errors have been thrown...
       // ...we've successfully added a new user to the database!
 
-      IOUtils.printMessage("addUser()", "user '" + username + "' successfully added");
+      IOUtils.printMessage("addUser()", "user \"" + USERNAME + "\" successfully added");
       return true;
 
     // catch SQL errors
@@ -1613,8 +1595,20 @@ public final class Database {
       if        (exi == 30000 && "42X01".equals(exs)) {
         IOUtils.printError("addUser()", "username cannot be a reserved SQL word (see: bit.ly/2Abbzxc)");
 
+        // user will exist in database at this point, but tables won't
+        // so make sure we delete that user
+
+        try {
+          this.statement.executeUpdate( // delete user
+            "call SYSCS_UTIL.SYSCS_DROP_USER('" + USERNAME + "')");
+
+        } catch (SQLException e2) {
+          IOUtils.printError("addUser()", "database has become corrupted. Export your information and create a new database.");
+          IOUtils.printSQLException("addUser()", e2);
+        }
+
       } else if (exi == 30000 && "28502".equals(exs)) {
-        IOUtils.printError("addUser()", "invalid username \"" + username + "\"");
+        IOUtils.printError("addUser()", "invalid username \"" + USERNAME + "\"");
 
       // unusual case? print error codes:
       } else IOUtils.printSQLException("addUser()", ex);
@@ -1655,13 +1649,9 @@ public final class Database {
     String USERNAME = username.toUpperCase();
 
     if (!USERS.contains(USERNAME)) {
-      IOUtils.printError("deleteUser()", "user '" + username + "' doesn't exist");
+      IOUtils.printError("deleteUser()", "user \"" + USERNAME + "\" doesn't exist");
       return false;
     }
-
-    //--------------------------------------------------------------------------
-    //  verify DBO password
-    //--------------------------------------------------------------------------
 
     // if current user is not DBO, they can't use this method
     if(!userIsDBO()) {
@@ -1674,21 +1664,7 @@ public final class Database {
     String OWNER = OPTOWNER.get();
 
     try { // verify the DBO's password
-      // get the salt and hash from the DBO's SECURE table
-      resultSet = this.statement.executeQuery("select * from " + OWNER + ".SECURE");
-      resultSet.next();
-
-      String salt = resultSet.getString(1);
-      String hash = resultSet.getString(2);
-
-      // check if given password can be transformed to hash in database
-      boolean isValid = PasswordUtils.verifyPassword(dboPassword, hash, salt);
-
-      // if valid, continue, otherwise return false
-      if (!isValid) {
-        IOUtils.printError("deleteUser()", "could not verify database owner's password");
-        return false;
-      }
+      if(!verifyPassword(OWNER, dboPassword)) return false;
 
       //------------------------------------------------------------------------
       //  drop user's tables and schema
@@ -1703,7 +1679,7 @@ public final class Database {
         "call SYSCS_UTIL.SYSCS_DROP_USER('" + USERNAME + "')");
 
       // if we've made it this far without throwing an error, success!
-      IOUtils.printMessage("deleteUser()", "user '" + username + "' successfully deleted");
+      IOUtils.printMessage("deleteUser()", "user \"" + USERNAME + "\" successfully deleted");
       return true;
 
     // catch SQL exceptions
@@ -1750,46 +1726,32 @@ public final class Database {
     if (!OPTUSER.isPresent()) return false;
     String USER = OPTUSER.get();
 
+    // verify the user's password
+    if(!verifyPassword(USER, oldPassword)) return false;
+
     try {
-      // get the salt and hash from this user's SECURE table
-      resultSet = this.statement.executeQuery("select * from SECURE");
-      resultSet.next();
+      ps_chpwd.setString(1, USER);
+      ps_chpwd.setString(2, newPassword);
 
-      String salt = resultSet.getString(1);
-      String hash = resultSet.getString(2);
+      // generate salt and hash password
+      Optional<String> optsalt = PasswordUtils.generateSalt(512);
+      if (!optsalt.isPresent()) return false;
+      String salt = optsalt.get();
 
-      // check if given password can be transformed to hash in database
-      boolean isValid = PasswordUtils.verifyPassword(oldPassword, hash, salt);
+      Optional<String> opthash = PasswordUtils.hashPassword(newPassword, salt);
+      if (!opthash.isPresent()) return false;
+      String hash = opthash.get();
 
-      // if so, change current password to given password
-      if (isValid) {
-        ps_chpwd.setString(1, USER);
-        ps_chpwd.setString(2, newPassword);
+      // update salt and hash in database
+      this.statement.execute("update " + USER + ".SECURE set hash = '" +
+        hash + "', salt = '" + salt + "'");
 
-        // generate salt and hash password
-        Optional<String> optsalt = PasswordUtils.generateSalt(512);
-        if (!optsalt.isPresent()) return false;
-        salt = optsalt.get();
+      // don't update password until hash and salt are updated
+      ps_chpwd.execute();
 
-        Optional<String> opthash = PasswordUtils.hashPassword(newPassword, salt);
-        if (!opthash.isPresent()) return false;
-        hash = opthash.get();
-
-        // update salt and hash in database
-        this.statement.execute("update " + USER + ".SECURE set hash = '" +
-          hash + "', salt = '" + salt + "'");
-
-        // don't update password until hash and salt are updated
-        ps_chpwd.execute();
-
-        // inform the user that the password has been successfully changed
-        IOUtils.printMessage("changePassword()", "password successfully changed");
-        return true;
-
-      } else {
-        IOUtils.printMessage("changePassword()", "invalid password; password not changed");
-        return false;
-      }
+      // inform the user that the password has been successfully changed
+      IOUtils.printMessage("changePassword()", "password successfully changed");
+      return true;
 
     // catch SQL errors
     } catch (SQLException ex) {
@@ -1851,7 +1813,7 @@ public final class Database {
     String USERNAME = username.toUpperCase();
 
     if (!USERS.contains(USERNAME)) {
-      IOUtils.printError("resetPassword()", "user '" + username + "' doesn't exist");
+      IOUtils.printError("resetPassword()", "user \"" + USERNAME + "\" doesn't exist");
       return false;
     }
 
@@ -1870,21 +1832,7 @@ public final class Database {
     String OWNER = OPTOWNER.get();
 
     try { // verify the DBO's password
-      // get the salt and hash from the DBO's SECURE table
-      resultSet = this.statement.executeQuery("select * from " + OWNER + ".SECURE");
-      resultSet.next();
-
-      String salt = resultSet.getString(1);
-      String hash = resultSet.getString(2);
-
-      // check if given password can be transformed to hash in database
-      boolean isValid = PasswordUtils.verifyPassword(dboPassword, hash, salt);
-
-      // if valid, continue, otherwise return false
-      if (!isValid) {
-        IOUtils.printError("resetPassword()", "could not verify database owner's password");
-        return false;
-      }
+      if(!verifyPassword(OWNER, dboPassword)) return false;
 
       ps_chpwd.setString(1, USERNAME);
       ps_chpwd.setString(2, newPassword);
@@ -1892,11 +1840,11 @@ public final class Database {
       // generate salt and hash password
       Optional<String> optsalt = PasswordUtils.generateSalt(512);
       if (!optsalt.isPresent()) return false;
-      salt = optsalt.get();
+      String salt = optsalt.get();
 
       Optional<String> opthash = PasswordUtils.hashPassword(newPassword, salt);
       if (!opthash.isPresent()) return false;
-      hash = opthash.get();
+      String hash = opthash.get();
 
       // update salt and hash in database
       this.statement.execute("update " + USERNAME + ".SECURE set hash = '" +
@@ -1906,12 +1854,69 @@ public final class Database {
       ps_chpwd.execute();
 
       // inform the user that the password has been successfully changed
-      IOUtils.printMessage("resetPassword()", "password successfully reset");
+      IOUtils.printMessage("resetPassword()", "password successfully reset " +
+        "for user \"" + USERNAME + "\"");
       return true;
 
     // catch SQL errors
     } catch (SQLException ex) {
       IOUtils.printSQLException("resetPassword()", ex);
+      return false;
+    }
+  }
+
+  /**
+    * Returns {@code true} if and only if the provided {@code username} exists
+    * in the database, and the provided {@code password} matches that user's
+    * password.
+    *
+    * <p>Returns {@code false} if the user does not exist, if the password could
+    * not be verified, or if an {@link SQLException} was thrown.</p>
+    *
+    * @param username name of a user in the database
+    * @param password that user's password
+    *
+    * @return {@code true} if and only if the provided {@code username} exists
+    * in the database, and the provided {@code password} matches that user's
+    * password
+    *
+    **/
+  protected boolean verifyPassword (String username, String password) {
+
+    // verify that `username` is in the list of users
+    Optional<List<String>> OPTUSERS = users();
+    if (!OPTUSERS.isPresent()) return false;
+    List<String> USERS = OPTUSERS.get();
+
+    // capitalise username
+    String USERNAME = username.toUpperCase();
+
+    // check that USERNAME exists in the list of USERS
+    if (!USERS.contains(USERNAME)) {
+      IOUtils.printError("verifyPassword()", "user \"" + USERNAME + "\" doesn't exist");
+      return false;
+    }
+
+    try { // get the salt and hash from the user's SECURE table
+      resultSet = this.statement.executeQuery("select * from " + USERNAME + ".SECURE");
+      resultSet.next();
+
+      String salt = resultSet.getString(1);
+      String hash = resultSet.getString(2);
+
+      // check if given password can be transformed to hash in database
+      boolean isValid = PasswordUtils.verifyPassword(password, hash, salt);
+
+      // if valid, continue, otherwise return false
+      if (!isValid) {
+        IOUtils.printError("verifyPassword()", "could not verify password for user \""
+         + USERNAME + "\"");
+        return false;
+      } else return true;
+
+    // catch SQL exceptions
+    } catch (SQLException ex) {
+      IOUtils.printSQLException("verifyPassword()", ex);
       return false;
     }
   }
@@ -2059,7 +2064,7 @@ public final class Database {
     // print an error and return
 
     if (!tables().contains(TABLE)) {
-      IOUtils.printError("table()", "table '" + tableName + "' cannot be found");
+      IOUtils.printError("table()", "table \"" + TABLE + "\" cannot be found");
       return retval;
     }
 
@@ -2103,8 +2108,6 @@ public final class Database {
       retval.clear(); // clear the half-initialised list
       return retval;
   } }
-
-
 
   ///---------------------------------------------------------------------------
   ///

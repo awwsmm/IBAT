@@ -18,9 +18,15 @@ public class App extends Application {
   /** Main {@link Stage} of app. **/
   protected static Stage stage;
 
-  /** Entry point for MyContacts application. **/
+  /**
+    * Entry point for MyContacts application.
+    *
+    * @param args arguments passed to
+    * {@link Application#launch(String...) Application.launch()}
+    *
+    **/
   public static void main (String[] args) {
-    launch (args);
+    launch(args);
   }
 
   @Override

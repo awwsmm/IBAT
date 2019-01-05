@@ -3,22 +3,18 @@ package watson;
 import java.io.IOException;
 import java.util.List;
 
-import javafx.scene.Scene;
-import javafx.scene.control.TextField;
-import javafx.fxml.FXMLLoader;
-
-
-
 import javafx.application.Platform;
-import javafx.scene.control.Dialog;
-import javafx.scene.control.PasswordField;
-import javafx.scene.layout.GridPane;
+import javafx.fxml.FXMLLoader;
+import javafx.geometry.Insets;
+import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.ButtonType;
-import javafx.util.Pair;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
-
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.GridPane;
 
 import static watson.App.*;
 
@@ -114,11 +110,8 @@ public class MasterController {
     * Opens a prompt to change the user's password, then logs them out so they
     * can log back in with their new password.
     *
-    * @param oldPassword the user's current password
-    * @param newPassword the user's new password
-    *
     * @return {@code true} if and only if the user's password was successfully
-    * changed from the {@code oldPassword} to the {@code newPassword}
+    * changed
     *
     **/
   protected static boolean changePassword() {
@@ -128,32 +121,35 @@ public class MasterController {
     dialog.setHeaderText("Change Password:");
     dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
-    GridPane contents = new GridPane();
+    GridPane gp = new GridPane();
 
     Label oldLabel  = new Label("Current password:");
     Label newLabel1 = new Label("New password:");
     Label newLabel2 = new Label("Repeat new password:");
 
-    contents.add(oldLabel,  0, 0);
-    contents.add(newLabel1, 0, 1);
-    contents.add(newLabel2, 0, 2);
+    gp.add(oldLabel,  0, 0);
+    gp.add(newLabel1, 0, 1);
+    gp.add(newLabel2, 0, 2);
 
     PasswordField oldPass  = new PasswordField();
     PasswordField newPass1 = new PasswordField();
     PasswordField newPass2 = new PasswordField();
 
-    contents.add(oldPass,   1, 0);
-    contents.add(newPass1,  1, 1);
-    contents.add(newPass2,  1, 2);
+    gp.add(oldPass,   1, 0);
+    gp.add(newPass1,  1, 1);
+    gp.add(newPass2,  1, 2);
 
-    dialog.getDialogPane().setContent(contents);
+    gp.setPadding(new Insets(10, 10, 10, 10));
+    gp.setHgap(10);
+    gp.setVgap(10);
+    dialog.getDialogPane().setContent(gp);
 
     // request focus on the old password field by default
     Platform.runLater(() -> oldPass.requestFocus());
     dialog.showAndWait();
 
-    // quietly cancel if "CANCEL" button was clicked
-    if (dialog.getResult() == ButtonType.CANCEL) return false;
+    // quietly quit if user closed window or clicked "CANCEL"
+    if (dialog.getResult() != ButtonType.OK) return false;
 
     // ...otherwise, create a new alert
     Alert alert = new Alert(AlertType.CONFIRMATION, "", ButtonType.OK);
