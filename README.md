@@ -209,9 +209,7 @@ _MyContacts_ uses the [ControlsFX package](https://github.com/controlsfx/control
 
 The exception has been fixed and [committed to 9.0.1](https://bitbucket.org/controlsfx/controlsfx/commits/9c3a7b7bc77a714bd3fcb297edad4846087384ff), but this version is [not yet available on the Maven repository](https://mvnrepository.com/artifact/org.controlsfx/controlsfx). So I downloaded the source for 9.0.1 and built it in [Gradle](https://gradle.org/). But v9.0.1 has a _new_ bug in the same method, so unfortunately we're stuck with the stack trace output for now.
 
-If you want to try it out, the v9.0.1 jar is available here: ...and it can be installed locally to Maven with
-
-> INSERT CORRECT THING ABOVE
+If you want to try it out, [the v9.0.1 jar is available here](https://github.com/awwsmm/IBAT/blob/master/extra/controlsfx-9.0.1-SNAPSHOT.jar) and it can be installed locally to Maven with
 
 ``` bash
 $ mvn install:install-file \
