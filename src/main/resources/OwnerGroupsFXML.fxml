@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.scene.layout.BorderPane?>
-<?import javafx.scene.control.Button?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
 <?import javafx.scene.control.Menu?>
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
 <?import javafx.scene.control.SeparatorMenuItem?>
 <?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
 
 <BorderPane
   xmlns:fx="http://javafx.com/fxml"
-  fx:controller="watson.UsersController">
+  fx:controller="watson.OwnerGroupsController">
   <top>
     <MenuBar>
       <menus>
@@ -24,6 +27,8 @@
         </Menu>
         <Menu text="Users">
           <items>
+            <MenuItem text="Users Overview" onAction="#ownerUsers"/>
+            <SeparatorMenuItem />
             <MenuItem text="Create New User" onAction="#addUser"/>
             <MenuItem text="Delete Selected Users" onAction="#deleteUsers"/>
             <MenuItem text="Reset Selected Users' Passwords" onAction="#resetPasswords"/>
@@ -31,9 +36,9 @@
         </Menu>
         <Menu text="Tables">
           <items>
-            <MenuItem text="Contacts"/>
-            <MenuItem text="Groups"/>
-            <MenuItem text="Secure"/>
+            <MenuItem text="Contacts" onAction="#ownerContacts"/>
+            <MenuItem text="Groups" disable="true"/>
+            <MenuItem text="Secure" onAction="#ownerSecure"/>
           </items>
         </Menu>
         <Menu text="About">
@@ -48,7 +53,22 @@
     </MenuBar>
   </top>
   <center>
-    <TableView fx:id="usersTable">
-    </TableView>
+    <BorderPane>
+      <padding>
+        <Insets topRightBottomLeft="20"/>
+      </padding>
+      <top>
+        <HBox spacing="10" alignment="CENTER_LEFT">
+          <padding>
+            <Insets top="0" right="0" bottom="20" left="0"/>
+          </padding>
+          <Label text="Select User:"/>
+          <ComboBox fx:id="selection" BorderPane.alignment="CENTER" onAction="#changeSelection"/>
+        </HBox>
+      </top>
+      <center>
+        <TableView fx:id="table"/>
+      </center>
+    </BorderPane>
   </center>
 </BorderPane>

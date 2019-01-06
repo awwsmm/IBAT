@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Menu?>
+<?import javafx.scene.control.MenuBar?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.SeparatorMenuItem?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+
+<BorderPane
+  xmlns:fx="http://javafx.com/fxml"
+  fx:controller="watson.OwnerContactsController">
+  <top>
+    <MenuBar>
+      <menus>
+        <Menu text="Account">
+          <items>
+            <MenuItem text="Change Password" onAction="#changePassword"/>
+            <SeparatorMenuItem />
+            <MenuItem text="Log Out" onAction="#logout"/>
+            <MenuItem text="Quit" onAction="#quit"/>
+          </items>
+        </Menu>
+        <Menu text="Users">
+          <items>
+            <MenuItem text="Users Overview" onAction="#ownerUsers"/>
+            <SeparatorMenuItem />
+            <MenuItem text="Create New User" onAction="#addUser"/>
+            <MenuItem text="Delete Selected Users" onAction="#deleteUsers"/>
+            <MenuItem text="Reset Selected Users' Passwords" onAction="#resetPasswords"/>
+          </items>
+        </Menu>
+        <Menu text="Tables">
+          <items>
+            <MenuItem text="Contacts" disable="true"/>
+            <MenuItem text="Groups" onAction="#ownerGroups"/>
+            <MenuItem text="Secure" onAction="#ownerSecure"/>
+          </items>
+        </Menu>
+        <Menu text="About">
+          <items> <!-- disable / visible available for below -->
+            <MenuItem text="About MyContacts"/>
+            <SeparatorMenuItem />
+            <MenuItem text="MyContacts on GitHub" onAction="#gotoGitHub"/>
+            <MenuItem text="Author's Website" onAction="#gotoWebsite"/>
+          </items>
+        </Menu>
+      </menus>
+    </MenuBar>
+  </top>
+  <center>
+    <BorderPane>
+      <padding>
+        <Insets topRightBottomLeft="20"/>
+      </padding>
+      <top>
+        <HBox spacing="10" alignment="CENTER_LEFT">
+          <padding>
+            <Insets top="0" right="0" bottom="20" left="0"/>
+          </padding>
+          <Label text="Select User:"/>
+          <ComboBox fx:id="selection" BorderPane.alignment="CENTER" onAction="#changeSelection"/>
+        </HBox>
+      </top>
+      <center>
+        <TableView fx:id="table"/>
+      </center>
+    </BorderPane>
+  </center>
+</BorderPane>

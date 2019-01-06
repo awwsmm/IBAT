@@ -44,12 +44,14 @@ public class LoginController {
       // if DBO, load USERS list and open user management page
       if (isOwner) {
         USERS = db.users().get();
-        refreshApp("UsersFXML.fxml", "MyContacts :: User Management");
+        refreshApp("OwnerUsersFXML.fxml", "MyContacts :: User Management");
 
       } else // otherwise, leave USERS list null and open CONTACTS table
         refreshApp("ContactsFXML.fxml", "MyContacts :: Contacts Table");
 
-  } } // end of loginButton() method
+    }
+  } // end of loginButton() method
+
 
   // allow user to press "Enter" after user password to submit form
   @FXML

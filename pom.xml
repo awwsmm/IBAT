@@ -14,19 +14,18 @@
   <version>1.0-SNAPSHOT</version>
 
   <dependencies>
-<!--
+
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>3.8.1</version>
-      <scope>test</scope>
+      <groupId>org.controlsfx</groupId>
+      <artifactId>controlsfx</artifactId>
+      <version>9.0.0</version>
     </dependency>
--->
-  <dependency>
-    <groupId>org.apache.derby</groupId>
-    <artifactId>derby</artifactId>
-    <version>10.14.2.0</version>
-  </dependency>
+
+    <dependency>
+      <groupId>org.apache.derby</groupId>
+      <artifactId>derby</artifactId>
+      <version>10.14.2.0</version>
+    </dependency>
 
   </dependencies>
 
@@ -35,7 +34,6 @@
     <!-- FOR: preventing platform encoding warnings -->
     <!-- source: http://bit.ly/2v7PHzD -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-
 
     <!-- FOR: specifying java version is necessary -->
     <!-- source: http://bit.ly/2v2Teio -->
