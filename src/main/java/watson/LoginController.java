@@ -47,7 +47,7 @@ public class LoginController {
         refreshApp("OwnerUsersFXML.fxml", "MyContacts :: User Management");
 
       } else // otherwise, leave USERS list null and open CONTACTS table
-        refreshApp("ContactsFXML.fxml", "MyContacts :: Contacts Table");
+        refreshApp("UserContactsFXML.fxml", "MyContacts :: Contacts");
 
     }
   } // end of loginButton() method

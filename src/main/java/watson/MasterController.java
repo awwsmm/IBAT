@@ -16,12 +16,15 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TableColumn;
@@ -68,6 +71,11 @@ public class MasterController {
   protected ObservableList<ObservableList<String>> data
     = FXCollections.observableArrayList();
 
+  // selection box and list for general use
+  @FXML
+  protected ComboBox<String> selection;
+  protected ObservableList<String> selections = FXCollections.observableArrayList();
+
   /**
     * Extracts the {@link String} value of a {@link TextField} or
     * {@link PasswordField}.
@@ -106,7 +114,7 @@ public class MasterController {
 
     } catch (IOException ex) {
       IOUtils.printError("refreshApp()", "IOException while attempting to refresh app");
-//    ex.printStackTrace();
+      ex.printStackTrace();
       return false;
     }
   }
@@ -446,8 +454,378 @@ public class MasterController {
   }
 
   //----------------------------------------------------------------------------
+  //  'Contacts' menu items
+  //----------------------------------------------------------------------------
+
+  @FXML
+  private void userContacts() {
+    refreshApp("UserContactsFXML.fxml", "MyContacts :: Contacts");
+  }
+
+  @FXML
+  private boolean addContact() {
+    return addUpdateContact(true);
+  }
+
+  @FXML
+  private boolean updateContact() {
+    return addUpdateContact(false);
+  }
+
+  // private helper method to either add or update a contact
+  private boolean addUpdateContact (boolean add) {
+
+    String headerText = add ? "Add New" : "Update Selected";
+
+    Dialog<ButtonType> dialog = new Dialog<>();
+    dialog.setHeaderText(headerText + " Contact:");
+    dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+    // for later use
+    Alert alert = new Alert(AlertType.ERROR, "", ButtonType.OK);
+    List<String> contactIDs = null;
+
+    // if updating, make sure only one contact is selected
+    if (!add) {
+      contactIDs = table.getSelectionModel().getSelectedItems()
+        .stream().map(e -> e.get(0)).collect(Collectors.toList());
+
+      // can only update exactly one contact at a time
+      if (contactIDs.size() < 1) {
+        alert.setContentText("Must select a contact to update.");
+        alert.showAndWait();
+        return false;
+      }
+
+      if (contactIDs.size() > 1) {
+        alert.setContentText("Only one contact can be updated at a time.");
+        alert.showAndWait();
+        return false;
+      }
+    }
+
+    GridPane gp = new GridPane();
+
+    Label aLabel = new Label("First Name:");
+    Label bLabel = new Label("Surname:");
+    Label cLabel = new Label("Phone Number:");
+
+    gp.add(aLabel, 0, 0);
+    gp.add(bLabel, 0, 1);
+    gp.add(cLabel, 0, 2);
+
+    TextField firstName = new TextField();
+    TextField surName   = new TextField();
+    TextField phone     = new TextField();
+
+    gp.add(firstName, 1, 0);
+    gp.add(surName,   1, 1);
+    gp.add(phone,     1, 2);
+
+    gp.setPadding(new Insets(10, 10, 10, 10));
+    gp.setHgap(10);
+    gp.setVgap(10);
+    dialog.getDialogPane().setContent(gp);
+
+    // for later use
+    Contact c = null;
+    int contactID = -1;
+
+    // if updating, fill in fields with existing information
+    if (!add) {
+      contactID = Integer.parseInt(contactIDs.get(0));
+      c = db.getContact(contactID).get();
+
+      String firstNameString = c.get("firstName").get();
+      String surNameString   = c.get("surName").get();
+      String phoneString     = c.get("phone").get();
+
+      firstName.setText(firstNameString); // == null ? "" : firstNameString);
+        surName.setText(surNameString); //   == null ? "" : surNameString);
+          phone.setText(phoneString); //     == null ? "" : phoneString);
+    }
+
+    // request focus on the first field by default
+    Platform.runLater(() -> firstName.requestFocus());
+    dialog.showAndWait();
+
+    // quietly quit if user closed window or clicked "CANCEL"
+    if (dialog.getResult() != ButtonType.OK) return false;
+
+    // ...otherwise, create a new alert
+    alert = new Alert(AlertType.CONFIRMATION, "", ButtonType.OK);
+
+    // attempt to add or update thecontact
+    c = new Contact()
+      .set("FIRSTNAME", get(firstName))
+      .set("SURNAME",   get(surName))
+      .set("PHONE",     get(phone));
+
+    boolean success = add ? db.addContact(c) : db.updateContact(contactID, c);
+
+    if (success) {
+      String m = add ? "New contact successfully added." : "Contact successfully updated.";
+      alert.setContentText(m);
+      alert.showAndWait();
+      refreshApp("UserContactsFXML.fxml", "MyContacts :: Contacts");
+      return true;
+
+    } else {
+      String m = add ? "added." : "updated.";
+      alert.setContentText("Contact could not be " + m + " See log for details.");
+      alert.showAndWait();
+      return false;
+    }
+  }
+
+  @FXML
+  private boolean deleteContacts() {
+
+    // get list of selected contacts
+    List<String> contactIDs = table.getSelectionModel().getSelectedItems()
+      .stream().map(e -> e.get(0)).collect(Collectors.toList());
+
+    // for later use
+    Alert alert;
+
+    // if no contacts selected, throw error
+    if (contactIDs.size() < 1) {
+      alert = new Alert(AlertType.ERROR, "No contacts selected.", ButtonType.OK);
+      alert.showAndWait();
+      return false;
+    }
+
+    // otherwise, double-check with user
+    alert = new Alert(AlertType.CONFIRMATION,
+      "Are you sure you want to delete " + (contactIDs.size() > 1 ?
+        ("these " + contactIDs.size() + " contacts?") : "this contact?"),
+      ButtonType.OK, ButtonType.CANCEL);
+    alert.showAndWait();
+
+    // quietly quit if user closed window or clicked "CANCEL"
+    if (alert.getResult() != ButtonType.OK) return false;
+
+    // delete contacts
+    for (String contactID : contactIDs)
+      db.deleteContacts(Integer.parseInt(contactID));
+
+    refreshApp("UserContactsFXML.fxml", "MyContacts :: Contacts");
+    return true;
+  }
+
+  @FXML
+  private boolean addToGroup() {
+
+    // get list of selected contacts
+    List<String> contactIDs = table.getSelectionModel().getSelectedItems()
+      .stream().map(e -> e.get(0)).collect(Collectors.toList());
+
+    // for later use
+    Alert alert;
+
+    // if no contacts selected, throw error
+    if (contactIDs.size() < 1) {
+      alert = new Alert(AlertType.ERROR, "No contacts selected.", ButtonType.OK);
+      alert.showAndWait();
+      return false;
+    }
+
+    // otherwise, create pop-up with group selection
+    Dialog<ButtonType> dialog = new Dialog<>();
+    dialog.setHeaderText("Select Group:");
+    dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+    VBox vb = new VBox();
+    vb.setPadding(new Insets(10, 10, 10, 10));
+    vb.setAlignment(Pos.CENTER);
+    vb.setSpacing(10);
+
+    // get list of unique group names
+    ComboBox<String> selection = new ComboBox<>();
+    List<String> groupnames = db.groups().get();
+    Label option = null;
+
+    // if existing groups, show dropdown
+    if (groupnames.size() > 0) {
+      selections.clear();
+      for (String groupname : groupnames) selections.add(groupname);
+      selection.setItems(selections);
+      selection.getSelectionModel().selectFirst();
+      vb.getChildren().add(selection);
+      option = new Label("or, create a new group:");
+
+    // otherwise, user must create a new group
+    } else option = new Label("Create a new group:");
+
+    TextField newgroup = new TextField();
+
+    vb.getChildren().add(option);
+    vb.getChildren().add(newgroup);
+
+    dialog.getDialogPane().setContent(vb);
+    dialog.showAndWait();
+
+    // quietly quit if user closed window or clicked "CANCEL"
+    if (dialog.getResult() != ButtonType.OK) return false;
+
+    // if the user created a new group, add users to that
+    String newgroupname = get(newgroup);
+
+    // add selected users to group
+    String group = newgroupname.length() < 1 ? selection.getValue() : newgroupname;
+    for (String contactID : contactIDs)
+      db.addToGroup(group, Integer.parseInt(contactID));
+
+    // notify user and refresh page
+    alert = new Alert(AlertType.CONFIRMATION, contactIDs.size() +
+      " contact" + (contactIDs.size() > 1 ? "s " : " ") +
+      "successfully added to group.", ButtonType.OK);
+    alert.showAndWait();
+    refreshApp("UserContactsFXML.fxml", "MyContacts :: Contacts");
+    return true;
+  }
+
+  //----------------------------------------------------------------------------
+  //  'Groups' menu items
+  //----------------------------------------------------------------------------
+
+  @FXML
+  private void userGroups() {
+    refreshApp("UserGroupsFXML.fxml", "MyContacts :: Groups");
+  }
+
+  @FXML
+  private boolean deleteGroups() {
+
+    // first, check if any groups exist
+    List<String> groups = db.groups().get();
+    Alert alert;
+
+    if (groups.size() < 1) {
+      alert = new Alert(AlertType.ERROR, "No groups exist.", ButtonType.OK);
+      alert.showAndWait();
+      return false;
+    }
+
+    // create pop-up with list of existing groups for user to select
+    Dialog<ButtonType> dialog = new Dialog<>();
+    dialog.setHeaderText("Select Groups to Delete:");
+    dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+    VBox vb = new VBox();
+    vb.setPadding(new Insets(10, 10, 10, 10));
+    vb.setAlignment(Pos.CENTER);
+    vb.setSpacing(10);
+
+    ListView<String> listView = new ListView<>();
+    listView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+    for (String group : groups) listView.getItems().add(group);
+
+    vb.getChildren().add(listView);
+    dialog.getDialogPane().setContent(vb);
+    dialog.showAndWait();
+
+    // quietly quit if user closed window or clicked "CANCEL"
+    if (dialog.getResult() != ButtonType.OK) return false;
+
+    // ... or if no groups are selected
+    ObservableList<String> selected = listView.getSelectionModel().getSelectedItems();
+    if (selected.size() < 1) {
+      alert = new Alert(AlertType.ERROR, "No groups selected.", ButtonType.OK);
+      alert.showAndWait();
+      return false;
+    }
+
+    // otherwise, double-check with user
+    alert = new Alert(AlertType.CONFIRMATION,
+      "Are you sure you want to delete " + (selected.size() > 1 ?
+        ("these " + selected.size() + " groups?") : "this group?"),
+      ButtonType.OK, ButtonType.CANCEL);
+    alert.showAndWait();
+
+    // quietly quit if user closed window or clicked "CANCEL"
+    if (alert.getResult() != ButtonType.OK) return false;
+
+    // delete groups and refresh the page
+    for (String group : selected) db.deleteGroup(group);
+    refreshApp("UserGroupsFXML.fxml", "MyContacts :: Groups");
+    return true;
+  }
+
+  @FXML
+  private boolean renameGroup() {
+
+    // for later use
+    Alert alert;
+
+    // get list of unique group names, abort if none
+    List<String> groupnames = db.groups().get();
+    if (groupnames.size() < 1) {
+      alert = new Alert(AlertType.ERROR, "No groups exist.", ButtonType.OK);
+      alert.showAndWait();
+      return false;
+    }
+
+    // create pop-up with group selection
+    Dialog<ButtonType> dialog = new Dialog<>();
+    dialog.setHeaderText("Select Group to Rename:");
+    dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+    VBox vb = new VBox();
+    vb.setPadding(new Insets(10, 10, 10, 10));
+    vb.setAlignment(Pos.CENTER);
+    vb.setSpacing(10);
+
+    ComboBox<String> selection = new ComboBox<>();
+    selections.clear();
+    for (String groupname : groupnames) selections.add(groupname);
+    selection.setItems(selections);
+    selection.getSelectionModel().selectFirst();
+
+    Label msg = new Label("rename to");
+
+    TextField newgroup = new TextField();
+
+    vb.getChildren().add(selection);
+    vb.getChildren().add(msg);
+    vb.getChildren().add(newgroup);
+
+    dialog.getDialogPane().setContent(vb);
+    dialog.showAndWait();
+
+    // quietly quit if user closed window or clicked "CANCEL"
+    if (dialog.getResult() != ButtonType.OK) return false;
+
+    // otherwise, rename the group and refresh the page
+    boolean success = db.renameGroup(selection.getSelectionModel().getSelectedItem(), get(newgroup));
+
+    if (success) {
+      alert = new Alert(AlertType.CONFIRMATION, "Group successfully renamed.", ButtonType.OK);
+      alert.showAndWait();
+      refreshApp("UserGroupsFXML.fxml", "MyContacts :: Groups");
+      return true;
+
+    } else {
+      alert = new Alert(AlertType.ERROR, "Group could not be renamed. See log for details.", ButtonType.OK);
+      alert.showAndWait();
+      return false;
+    }
+  }
+
+  //----------------------------------------------------------------------------
   //  'About' menu items
   //----------------------------------------------------------------------------
+
+  @FXML
+  private void about() {
+    Alert alert = new Alert(AlertType.INFORMATION,
+      "This application was created to fulfill the requirements of the term " +
+      "project for IBAT College Dublin's \"Advanced Diploma in Computer " +
+      "Programming (Advanced Java)\" course during the Fall 2018 semester.",
+      ButtonType.OK);
+    alert.setHeaderText("About MyContacts");
+    alert.showAndWait();
+  }
 
   private void web (String url) {
     try {

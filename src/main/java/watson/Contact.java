@@ -175,7 +175,9 @@ public final class Contact {
     * {@code info}, if the {@code key} exists.
     *
     * <p>If the {@code key} doesn't exist, an {@link Optional#empty empty Optional}
-    * is returned. Note that {@code key}s are case-insensitive.</p>
+    * is returned. Note that {@code key}s are case-insensitive. If the {@code key}
+    * exists, but the value is {@code null}, an empty {@link String} is wrapped in
+    * an {@link Optional} and returned.</p>
     *
     * @param key name of the value to get from this {@link Contact}'s {@code info}
     *
@@ -186,7 +188,8 @@ public final class Contact {
   public Optional<String> get (String key) {
     if (!keyExists(key)) return Optional.empty();
     String KEY = key.toUpperCase();
-    return Optional.of(info.get(KEY).getValue());
+    String value = info.get(KEY).getValue();
+    return value == null ? Optional.of("") : Optional.of(value);
   }
 
   /**

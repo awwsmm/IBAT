@@ -7,14 +7,8 @@ import java.util.List;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
-import javafx.scene.control.ComboBox;
 
 public class OwnerContactsController extends MasterController {
-
-  @FXML
-  private ComboBox<String> selection;
-
-  private ObservableList<String> selections = FXCollections.observableArrayList();
 
   //----------------------------------------------------------------------------
   //  initialize() is called when OwnerContactsFXML.fxml is loaded
@@ -34,13 +28,17 @@ public class OwnerContactsController extends MasterController {
     selection.getSelectionModel().selectFirst();
 
     // load user's CONTACTS table
-    displayTable(selection.getValue() + ".CONTACTS", 190, true);
+    displayTable(selection.getValue() + ".CONTACTS", 189, true);
 
   } // end initialize()
 
   @FXML
   private void changeSelection() {
-    displayTable(selection.getValue() + ".CONTACTS", 190, false);
+
+    data.clear(); // clear table data
+    table.setItems(data); // clear table
+
+    displayTable(selection.getValue() + ".CONTACTS", 189, false);
   }
 
 }

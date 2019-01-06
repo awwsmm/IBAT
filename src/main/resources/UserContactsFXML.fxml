@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.geometry.Insets?>
-
-
 <?import javafx.scene.control.Menu?>
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
@@ -13,7 +11,7 @@
 
 <BorderPane
   xmlns:fx="http://javafx.com/fxml"
-  fx:controller="watson.OwnerUsersController">
+  fx:controller="watson.UserContactsController">
   <top>
     <MenuBar>
       <menus>
@@ -25,20 +23,22 @@
             <MenuItem text="Quit" onAction="#quit"/>
           </items>
         </Menu>
-        <Menu text="Users">
+        <Menu text="Contacts">
           <items>
-            <MenuItem text="Users Overview" disable="true"/>
+            <MenuItem text="Contacts Overview" onAction="#userContacts"/>
             <SeparatorMenuItem />
-            <MenuItem text="Create New User" onAction="#addUser"/>
-            <MenuItem text="Delete Selected Users" onAction="#deleteUsers"/>
-            <MenuItem text="Reset Selected Users' Passwords" onAction="#resetPasswords"/>
+            <MenuItem text="Create New Contact" onAction="#addContact"/>
+            <MenuItem text="Update Selected Contact" onAction="#updateContact"/>
+            <MenuItem text="Delete Selected Contacts" onAction="#deleteContacts"/>
+            <MenuItem text="Add Selected Contacts to Group" onAction="#addToGroup"/>
           </items>
         </Menu>
-        <Menu text="Tables">
+        <Menu text="Groups">
           <items>
-            <MenuItem text="Contacts" onAction="#ownerContacts"/>
-            <MenuItem text="Groups" onAction="#ownerGroups"/>
-            <MenuItem text="Secure" onAction="#ownerSecure"/>
+            <MenuItem text="Groups Overview" onAction="#userGroups"/>
+            <SeparatorMenuItem />
+            <MenuItem text="Delete Groups" onAction="#deleteGroups"/>
+            <MenuItem text="Rename Group" onAction="#renameGroup"/>
           </items>
         </Menu>
         <Menu text="About">

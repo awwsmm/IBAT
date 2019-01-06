@@ -43,7 +43,7 @@
         </Menu>
         <Menu text="About">
           <items> <!-- disable / visible available for below -->
-            <MenuItem text="About MyContacts"/>
+            <MenuItem text="About MyContacts" onAction="#about"/>
             <SeparatorMenuItem />
             <MenuItem text="MyContacts on GitHub" onAction="#gotoGitHub"/>
             <MenuItem text="Author's Website" onAction="#gotoWebsite"/>

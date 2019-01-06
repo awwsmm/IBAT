@@ -21,6 +21,8 @@ import java.util.stream.Collectors;
 
 import org.apache.derby.jdbc.EmbeddedDriver;
 
+import watson.Contact;
+
 /**
   * Class for creating, loading, and manipulating
   * <a href="https://db.apache.org/derby/">Apache Derby</a> databases.
@@ -662,6 +664,15 @@ public final class Database {
           "call SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY(" +
           "'derby.connection.requireAuthentication', 'true')");
 
+        // don't cache identity (primary key) values: http://bit.ly/2SKi1ml
+        // if the database doesn't shut down properly (as it might if the user
+        // hits the [X] button on the UI window), cached identity values are
+        // lost and may "jump" by 100 the next time the DB is opened
+
+        state.executeUpdate(
+          "CALL SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY(" +
+          "'derby.language.sequence.preallocator', '1')");
+
         //----------------------------------------------------------------------
         //
         //  Note on user creation:
@@ -867,9 +878,77 @@ public final class Database {
 
   ///---------------------------------------------------------------------------
   ///
-  ///  ADD, REMOVE, UPDATE CONTACTS IN CONTACTS TABLE
+  ///  GET, ADD, REMOVE, UPDATE CONTACTS IN CONTACTS TABLE
   ///
   ///---------------------------------------------------------------------------
+
+  /**
+    * Attempts to find the contact with the specified {@code ID} number in the
+    * current user's {@code CONTACTS} table and return it as a {@link Contact}
+    * object.
+    *
+    * <p>Returns {@code Optional#empty an empty Optional} if the {@code ID}
+    * doesn't match any contact in the {@code CONTACTS} table or if there was an
+    * {@link SQLException}.</p>
+    *
+    * @param ID ID number of the contact to retrieve
+    *
+    * @return the contact with the specified {@code ID} number in the current
+    * user's {@code CONTACTS} table, wrapped in an {@link Optional}, or, if
+    * there was an error, {@code Optional#empty an empty Optional}
+    *
+    **/
+  public Optional<Contact> getContact (int ID) {
+
+    // run some initial validation
+    String opName = "getContact()";
+    String USER = contactOpsInit(opName);
+    if (USER == null) return Optional.empty();
+
+    try { // to update specified contacts in CONTACTS table
+
+      // return empty if contact ID doesn't exist
+      String query = "select * from " + USER + ".CONTACTS where id = " + ID;
+      if (!contactOpsContactsAffected(opName, query)) return Optional.empty();
+
+      // otherwise, extract contact from database
+      resultSet = this.statement.executeQuery(query);
+      rsmd = resultSet.getMetaData();
+      int numberOfColumns = rsmd.getColumnCount();
+
+      // get field names -- skip first, it's ID #
+      List<String> fields = new ArrayList<String>(4);
+      for (int ii = 2; ii <= numberOfColumns; ++ii)
+        fields.add(rsmd.getColumnName(ii));
+
+      // get field values -- skip first, it's ID #
+      resultSet.next();
+      List<String> info = new ArrayList<String>(4);
+      for (int ii = 2; ii <= numberOfColumns; ++ii)
+        info.add(resultSet.getString(ii));
+
+      // loop over fields and values and create contact
+      Contact c = new Contact();
+
+      for (int ii = 2; ii <= numberOfColumns; ++ii)
+        c.set(fields.get(ii-2), info.get(ii-2));
+
+      return Optional.of(c);
+
+    // catch SQL exceptions
+    } catch (SQLException ex) {
+
+      int    exi = ex.getErrorCode();
+      String exs = ex.getSQLState();
+
+      // catch common cases
+      if        (exi == 20000 && "24000".equals(exs) && false) {
+        IOUtils.printError(opName, "No contact with this ID number exists in this table");
+
+      } else IOUtils.printSQLException(opName, ex);
+      return Optional.empty();
+    }
+  }
 
   /**
     * Attempts to add the given {@link Contact} to the list of contacts in the
@@ -976,17 +1055,17 @@ public final class Database {
 
   /**
     * Attempts to delete the contacts with the given contact {@code ID}s from
-    * the current user's {@code CONTACTS} table.
+    * the current user's {@code CONTACTS} and {@code GROUPS} tables.
     *
     * <p>Returns {@code false} if no contacts were deleted (whether due to invalid
     * {@code ID} numbers, database connectivity problems, or some other issue).
     * Returns {@code true} if at least one contact was deleted from the current
-    * user's {@code CONTACTS} table as a result of this method.</p>
+    * user's tables as a result of this method.</p>
     *
-    * @param IDs ID indices of the contacts to delete (from the {@code CONTACTS} table)
+    * @param IDs contact ID indices of the contacts to delete
     *
     * @return {@code true} if at least one contact was deleted from the current
-    * user's {@code CONTACTS} table
+    * user's tables
     *
     * @see tables tables(), to see available tables
     * @see printTable printTable(), to print a particular table to the terminal
@@ -1015,8 +1094,10 @@ public final class Database {
         any = (any || contactOpsContactsAffected(opName, query));
       } if (!any) return false;
 
-      for (int ID : IDs)
+      for (int ID : IDs) {
         this.statement.execute("delete from " + USER + ".CONTACTS where id = " + ID);
+        this.statement.execute("delete from " + USER + ".GROUPS where contactid = " + ID);
+      }
 
       IOUtils.printMessage(opName, "contacts successfully deleted");
       return true;
@@ -1272,6 +1353,38 @@ public final class Database {
       IOUtils.printSQLException(opName, ex);
       return false;
     }
+  }
+
+  /**
+    * Attempts to return a {@link List} of all unique group names in the current
+    * user's {@code GROUPS} table, wrapped in an {@link Optional}.
+    *
+    * <p>Returns {@link Optional#empty an empty Optional} if there is a problem
+    * getting the name of the current user.</p>
+    *
+    * @return a {@link List} of all unique group names in the current user's
+    * {@code GROUPS} table, wrapped in an {@link Optional}, or if there was a
+    * problem, {@link Optional#empty an empty Optional}.
+    *
+    **/
+  public Optional<List<String>> groups() {
+
+    // run some initial validation
+    String opName = "groups()";
+    String USER = contactOpsInit(opName);
+    if (USER == null) return Optional.empty();
+
+    // get the GROUPS table as a List<List<String>>
+    List<List<String>> GROUPS = table(USER + ".GROUPS");
+
+    // select only the group "NAME" column, without the header
+    final int nameColumn = GROUPS.get(0).indexOf("NAME");
+
+    // get the group names (last column)
+    List<String> groupnames = GROUPS.stream().skip(1).map(l -> l.get(nameColumn))
+      .distinct().sorted().collect(Collectors.toList());
+
+    return Optional.of(groupnames);
   }
 
   //----------------------------------------------------------------------------

@@ -32,6 +32,7 @@ public class App extends Application {
   @Override
   public void start (Stage s) {
     stage = s;
+    stage.setResizable(false);
     refreshApp("LoginFXML.fxml", "MyContacts :: Log In");
   }
 

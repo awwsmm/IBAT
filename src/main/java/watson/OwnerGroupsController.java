@@ -40,6 +40,10 @@ public class OwnerGroupsController extends MasterController {
 
   @FXML
   private void changeSelection() {
+
+    data.clear(); // clear table data
+    table.setItems(data); // clear table
+
     displayTable(selection.getValue() + ".GROUPS", 379, false);
   }
 
