@@ -1,5 +1,7 @@
 # MyContacts README
 
+Javadoc documentation available at [https://awwsmm.github.io/IBAT/](https://awwsmm.github.io/IBAT/).
+
 ## Motivation
 
 _MyContacts_ is an application created to fulfill the requirements of the term project for IBAT College Dublin's "Advanced Diploma in Computer Programming (Advanced Java)" course during the Fall 2018 semester. The specifications of the project are as follows:
