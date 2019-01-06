@@ -1,6 +1,6 @@
 ----------------------------------------------------------------
-Sun Jan 06 19:54:41 GMT 2019:
-Booting Derby version The Apache Software Foundation - Apache Derby - 10.14.2.0 - (1828579): instance a816c00e-0168-24bb-4b38-000002bb2428 
+Sun Jan 06 21:13:34 GMT 2019:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.14.2.0 - (1828579): instance a816c00e-0168-2503-843a-000002b69bd0 
 on database directory /Users/aww/Git/IBAT/example with class loader jdk.internal.loader.ClassLoaders$AppClassLoader@4f8e5cde 
 Loaded from file:/Users/aww/Git/IBAT/target/assignment-1.0-SNAPSHOT-jar-with-dependencies.jar
 java.vendor=Oracle Corporation
