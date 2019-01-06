@@ -34,7 +34,7 @@ public class OwnerGroupsController extends MasterController {
     selection.getSelectionModel().selectFirst();
 
     // load user's GROUPS table
-    displayTable(selection.getValue() + ".GROUPS", 379, true);
+    displayTable(selection.getValue() + ".GROUPS", 252, true);
 
   } // end initialize()
 
@@ -44,7 +44,7 @@ public class OwnerGroupsController extends MasterController {
     data.clear(); // clear table data
     table.setItems(data); // clear table
 
-    displayTable(selection.getValue() + ".GROUPS", 379, false);
+    displayTable(selection.getValue() + ".GROUPS", 252, false);
   }
 
 }
