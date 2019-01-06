@@ -5,15 +5,15 @@
 _MyContacts_ is an application created to fulfill the requirements of the term project for IBAT College Dublin's "Advanced Diploma in Computer Programming (Advanced Java)" course during the Fall 2018 semester. The specifications of the project are as follows:
 
 > Write a contacts management application that makes use of JavaFX and a JavaDB database or files for persistent storage. Your application should allow users to carry out CRUD like functionality (i.e., Create, Read, Update and Delete). Your application should support different screens for different kinds of functionality, e.g.:
-
+>
 > 1. There should be a login screen
-1. There should be a mechanism to change your password
-1. There should be a way to view contacts (all contacts, and then contacts meeting some basic search criteria. You should support searching on 3 different fields. So, for the contact system it would be first name, surname and contact number. Searching must allow combinations of these fields (e.g., surname and contact number). Results should be displayable in different orders, e.g., ascending/descending on surname, ascending/descending on first name).
-1. There should be a way to create contacts
-1. There should be a way to edit contacts
-1. There should be a way to delete one or more contacts based on the same criteria mentioned in the search feature in point 2 above.
-1. There should be a group feature that enables contacts to be associated with a group (e.g., basketball team group, personal friends’ group, work colleagues’ group, hiking club group).
-1. As with contacts there should be a mechanism to support CRUD of groups as well as management of membership of such groups.
+> 1. There should be a mechanism to change your password
+> 1. There should be a way to view contacts (all contacts, and then contacts meeting some basic search criteria. You should support searching on 3 different fields. So, for the contact system it would be first name, surname and contact number. Searching must allow combinations of these fields (e.g., surname and contact number). Results should be displayable in different orders, e.g., ascending/descending on surname, ascending/descending on first name).
+> 1. There should be a way to create contacts
+> 1. There should be a way to edit contacts
+> 1. There should be a way to delete one or more contacts based on the same criteria mentioned in the search feature in point 2 above.
+> 1. There should be a group feature that enables contacts to be associated with a group (e.g., basketball team group, personal friends’ group, work colleagues’ group, hiking club group).
+> 1. As with contacts there should be a mechanism to support CRUD of groups as well as management of membership of such groups.
 
 This app uses an encrypted Apache Derby database for data storage and JavaFX + FXML for the UI.
 
@@ -47,7 +47,7 @@ There is a pre-made example database at [IBAT/example/](https://github.com/awwsm
 
 Running the app in GUI mode opens the app and shows the following login screen:
 
-> INSERT IMAGE HERE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/0.png)
 
 ... this fulfills the first requirement (_"There should be a login screen"_). The user can log in as the database owner (DBO) or as a regular user. The DBO has the ability to add and delete users, and see all of the tables present in the database. Regular users cannot see anyone's tables but their own and have no power to add or delete users.
 
@@ -55,25 +55,25 @@ The login screen asks for a database name and boot password. If the database nam
 
 As I have the example database set up locally, I'll log in to that one, rather than creating a new database. The **database name** of the example database is "example", the **boot password** is "bootpass", the **database owner** is "owner", and the database owner's **password** is "ownerpass".
 
-> INSERT IMAGE HERE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/1.png)
 
 ### 2. "There should be a mechanism to change your password"
 
 Once logged in, all users (including the DBO) have access to an "Account" menu at the top of the app. In it, there is a menu option titled "Change Password":
 
-> INSERT IMAGE HERE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/2.png)
 
 ...clicking on this menu option will open a popup window that prompts the user to change their password, making sure they enter the new password twice. Passwords have minimal restrictions: they cannot be null, they cannot begin or end with any whitespace, and they cannot be empty strings. That's it. Derby trims leading and trailing whitespace and this causes issues with future authentication. Future improvements to this app could include requiring a certain number of characters, etc. in user passwords.
 
-> INSERT IMAGE HERE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/3.png)
 
 Once the user enters their new password, they will be logged out so they can log back in with the new password:
 
-> INSERT IMAGE HERE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/4.png)
 
 Additionally, the DBO has the ability to _reset_ the password of any non-DBO user. This option can be found in the "Users" menu, at "Reset Selected Users' Passwords":
 
-> INSERT IMAGE HERE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/5.png)
 
 This popup doesn't ask for a new password because passwords are _reset_ to the user's username + "pass", which is why multiple users can have their passwords reset at the same time. (For example, "JEFF"'s reset password would be "jeffpass", all lowercase.) This mechanism is in place in case a user forgets his/her password.
 
@@ -83,101 +83,103 @@ Note that the DBO cannot reset their own password -- they must use the "Change P
 
 In _MyContacts_, the DBO is set up as an administrative account only. The DBO can add and create users, view all tables in the database, and reset users' passwords. The DBO does not have their own list of contacts or groups. Regular users do, however, so I've logged out and logged back in as "susan" (password "susanpass"):
 
-> IMAGE HERE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/6.png)
 
 The first thing a regular user sees when they log in to _MyContacts_ is their contacts list. Contacts have first names, surnames, and phone numbers, as well as auto-incrementing ID numbers.
 
 [ControlsFX](https://github.com/controlsfx/controlsfx) is used for column filtering and sorting, as it's much more powerful than anything I could have written during the allotted time for this assignment. Right-clicking on a column header opens a drop-down list which can be used to filter individual columns:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/7.png)
 
 When a column is being filtered, a small icon appears next to the column name:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/8.png)
 
 Filters can be applied to multiple columns and only those rows which satisfy _all_ of the filters will be displayed. Right-clicking on further columns shows "greyed-out" options, which have been removed by the earlier-applied filters:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/9.png)
 
 Clicking on the column headers also cycles through the display options, which are: default ordering, low-to-high ordering, and high-to-low ordering. The table can only be ordered on one column at a time:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/10.png)
 
 ### 4. "There should be a way to create contacts"
 
 Contacts can be created by clicking on "Contacts" > "Create New Contact":
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/11.png)
 
 This opens a pop-up window which prompts the user for the new contact's first name, surname, and phone number. Any (but not all) of these can be left blank, and there is some basic validation done for phone numbers (they can only contain digits and an optional leading '+' sign). All user-entered information is sanitised to prevent injection attacks (usernames can only contain alphanumeric characters and underscores; contact names can only contain alphabetic characters and apostrophes, etc.).
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/12.png)
 
 ### 5. "There should be a way to edit contacts"
 
 Contacts can be edited by selecting one from the table and clicking on "Contacts" > "Update Selected Contact" in the menu. Information which is already available for that contact is filled in and the user can change one or more fields, adding, deleting, or updating any information:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/13.png)
 
 ### 6. Deleting Contacts Based on Search Criteria
 
 One or more contacts can be deleted by selecting them from the table and clicking on "Contacts" > "Delete Selected Contacts" in the menu:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/15.png)
 
 The user will be asked to confirm their action, and then the contacts will be deleted:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/16.png)
 
 This can, of course, be combined with the ControlsFX column filters to select and delete only those contacts which meet some specific criteria:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/17.png)
 
 ### 7. Associating Contacts with Groups
 
 One or more contacts can be added to a group by selecting them from the table and clicking on "Contacts" > "Add Selected Contacts to Group" in the menu:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/18.png)
 
 Contacts can be added to an existing group by selecting it from the dropdown menu:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/19.png)
 
 ...or added to a new group by entering the new group name:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/20.png)
 
 The user can see an overview of which contacts belong to which group by selecting "Groups" > "Groups Overview" from the menu:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/21.png)
 
 This opens the "Groups" page, which shows which group names are associated with particular contact IDs:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/22.png)
 
 ### 8. CRUD of Groups
 
 Groups can also be created, updated (renamed), and destroyed (deleted). Adding contacts to a new group, as was just shown, creates a new group. Groups can be updated (renamed) by selecting "Groups" > "Rename Group" from the menu:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/23.png)
 
 A popup appears in which the user can select a particular group to rename and assign it a new name:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/24.png)
 
 That name is immediately reflected in the table on the "Groups" page:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/25.png)
 
 One or more groups can be deleted by selecting "Groups" > "Delete Groups" from the menu:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/26.png)
 
 This opens up a window where the user can select one or more groups to delete:
 
-> IMAGE
+![](https://github.com/awwsmm/IBAT/blob/master/extra/27.png)
 
 This deletes the associations between particular contacts and particular groups, but does not delete those contacts themselves.
+
+![](https://github.com/awwsmm/IBAT/blob/master/extra/28.png)
 
 ## Considerations
 
