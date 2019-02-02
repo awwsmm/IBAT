@@ -1,1 +1,1 @@
-java -Xmx4g -jar target/assignment-1.0-SNAPSHOT-jar-with-dependencies.jar
+/usr/lib/jvm/java-8-openjdk-amd64/bin/java -jar target/assignment-1.0-SNAPSHOT-jar-with-dependencies.jar
