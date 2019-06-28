@@ -508,12 +508,12 @@ public final class Database {
   //
   //----------------------------------------------------------------------------
 
-  private final Connection connection;
+//  private final Connection connection;
   private final Statement statement;
 
   // singleton class, so constructor is private
   private Database (Connection connection, Statement statement) {
-    this.connection = connection;
+//    this.connection = connection;
     this.statement = statement;
   }
 
